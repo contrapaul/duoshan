@@ -827,14 +827,31 @@ CREATE TABLE audit_log (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT, target 
 - **Rate limits** cover chat, room creation, and room-code lookups (code guessing).
 
 ### 13.10 Cost estimate (Cloudflare) ◆ (verify current pricing in Phase 0)
-- The **Workers Paid plan (~$5/month)** is expected to be needed. Long-running game rooms exceed the free daily Durable Object allowances quickly.
-- **What's billed:**
-  - DO **wall-clock duration** while a room is active: roughly 450 GB-s per room-hour at 128 MB.
-  - **Incoming** WebSocket messages, billed as requests at 20 messages to 1 request. A full 16-player room at 30 Hz input is roughly 86k billable requests per hour.
-  - D1 reads and writes are tiny.
-- **Example:** 5 full rooms × 2 hours per school day × 22 days = 220 room-hours per month. That's about 19M requests and 100k GB-s, which comes to **roughly $5–10/month on top of the $5 plan**. Bot-heavy rooms with few humans cost far less.
-- **Voice:** Cloudflare Realtime/TURN egress is charged per GB after a free allowance. Voice ships last, so its cost is measured in Phase 6.
-- **No machines to rent, patch, or back up.** D1 has Time Travel point-in-time restore.
+The owner already has the **Workers Paid plan ($5/month)**. Its Durable Object allowance covers most of DuoShan. Extra cost comes only from usage beyond what the plan includes.
+
+| DO meter | Included in the $5 plan | Overage | DuoShan usage |
+|---|---|---|---|
+| **Requests** | 1M/month | $0.15 per million | **Incoming** WebSocket messages count at 20 messages = 1 request. A full room of 16 humans sending input at 30 Hz is 1.73M messages/hour, or **~86k billable requests per room-hour**. The allowance covers only about 12 full-room-hours a month, so **this is the main extra cost.** |
+| **Duration** | 400,000 GB-s/month | $12.50 per million GB-s | Charged while a room is awake, at 128 MB whatever it uses: **450 GB-s per room-hour**. The allowance covers about 890 room-hours a month. |
+| Outgoing messages (snapshots) | — | Free | — |
+| Bots | — | Free | Bots run inside the DO and send no messages. Only human inputs cost anything. |
+| D1, Worker `/api` requests, static assets | Large allowances | — | Negligible at school scale |
+| Voice (Realtime SFU/TURN) | Free monthly GB allowance | Per GB after that | Measured in Phase 6 |
+
+**Examples** (full 16-human rooms, which is the worst case):
+
+| Usage | Room-hours/month | Extra requests | Extra duration | **Added cost** |
+|---|---|---|---|---|
+| 5 rooms × 2 h × 22 school days | 220 | 19M − 1M → $2.70 | 99k GB-s, within allowance | **≈ $3/month** |
+| 20 rooms × 2 h × 30 days | 1,200 | 104M − 1M → $15.40 | 540k − 400k GB-s → $1.75 | **≈ $17/month** |
+
+**Cost levers**, if needed:
+- Send input at 20 Hz instead of 30 Hz (−33% requests).
+- Skip input packets when nothing has changed, for example when a player is standing still.
+- Let lobbies and empty rooms **hibernate**, using the WebSocket Hibernation API, so idle rooms bill no duration.
+- Set up a usage alert in the Cloudflare dashboard.
+
+There are no machines to rent, patch, or back up. D1 has Time Travel point-in-time restore.
 
 ### 13.11 Latency: Shenzhen and worldwide
 - The owner confirms the domain is accessible from mainland China. **Accessibility isn't the same as latency, though.** On standard Cloudflare plans, mainland traffic is not served from mainland data centres, and it is sometimes routed to distant PoPs (e.g. US West) rather than Hong Kong. A real-time game is far more sensitive to this than a card game or a website.
@@ -1098,7 +1115,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
 | Q-T9 | A | Is **`duoshan.contrapaul.com`** the right address? | Yes |
-| Q-T10 | A | Is the **Workers Paid plan (~$5/month)** on your Cloudflare account OK? Durable Object rooms will outgrow the free tier. Expected total is roughly $5–15/month at school scale (§13.10). | Yes |
+| Q-T10 | ✅ | Workers Paid plan: **already in place.** Expected extra cost is about $3/month at school scale, and about $17 if the game spreads widely (§13.10). | — |
 | Q-T11 | A | Can you (or a colleague) run the **latency test page** from school and home in Shenzhen during Phase 0? It's one click and reports the numbers. | Yes |
 | Q-T12 | B | If Shenzhen latency is poor, is **Local Host mode** (one student's browser referees, and classmates connect peer-to-peer) acceptable for in-school play? | Yes, as a fallback |
 | Q-T13 | B | Should the game be playable during school hours, or is it after-school/home only? This affects the voice schedule defaults. | Both, with admin schedule toggles |
