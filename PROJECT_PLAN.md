@@ -1,7 +1,14 @@
 # Duǒshǎn 躲闪 — Elite Dodgeball
 ## Detailed Project Plan
 
-> **Status:** Draft v0.1, 2026-09-26. Built from `plans.md`.
+> **Status:** Draft v0.2, 2026-09-26. Built from `plans.md`.
+> **v0.2 changes (owner answers):**
+> - The architecture is now serverless Cloudflare (Workers, D1, Durable Objects), matching the owner's other projects. There are no dedicated game servers.
+> - Auth is ported from Tome of Secrets.
+> - The primary hardware is the MacBook Air M1+.
+> - The school is in Shenzhen, and players are worldwide.
+> - School IT is out of scope, and the owner has obtained leadership approval.
+> - Answered questions are recorded in §17.
 > Where `plans.md` leaves something open, this plan proposes a default and marks it with **[DECISION]**. Every **[DECISION]** is also listed in [§17 Open Questions](#17-open-questions-for-the-project-owner) so the owner can confirm or change it. Numbers in the tuning tables are starting points for playtesting, not final values.
 
 ---
@@ -20,7 +27,7 @@
 10. [Accounts, Safety, and Moderation](#10-accounts-safety-and-moderation)
 11. [Art, Characters, and Audio](#11-art-characters-and-audio)
 12. [School Messages and Banner System](#12-school-messages-and-banner-system)
-13. [Technical Architecture (Proposal)](#13-technical-architecture-proposal)
+13. [Technical Architecture](#13-technical-architecture)
 14. [Live Operations and Content Updates](#14-live-operations-and-content-updates)
 15. [Milestones and Timeline](#15-milestones-and-timeline)
 16. [Risk Register](#16-risk-register)
@@ -37,7 +44,7 @@ Duǒshǎn is a browser-based, physics-driven, team dodgeball game that plays lik
 
 | Area | Commitment |
 |---|---|
-| Platform | Desktop web browser (Chrome/Edge/Firefox/Safari), keyboard + mouse. Chromebooks are a first-class target. |
+| Platform | Desktop web browser (Safari/Chrome/Edge/Firefox), keyboard + mouse (trackpad playable). MacBook Air M1+ is the primary target. |
 | Access | Instant play as a guest. Optional account for chat, voice, skins, and Dodgecoins. |
 | Modes | Classic (3rd/1st person toggle), Classic FPV (1st person locked), Ultimate (free-for-all). Practice (offline vs bots). |
 | Players | Classic up to 8v8. Ultimate up to 8. Bots fill a match up to 6 players. |
@@ -46,7 +53,8 @@ Duǒshǎn is a browser-based, physics-driven, team dodgeball game that plays lik
 | Social | Room codes and share URLs, walk-around pre-match lobby, text chat, proximity voice (accounts only). |
 | Safety | Word filter ("NOPE"), incident logging, admin dashboard for renames, warnings, and bans. |
 | Ops | Ad-free. A banner framework carries school messages. Content (arenas, skins, balls) is added without touching account data. |
-| Reach | Must be playable from mainland China. English only. |
+| Reach | Worldwide, with the school in **Shenzhen**, so it must play well from mainland China. English only. |
+| Infrastructure | **Serverless Cloudflare**, like the owner's other projects: Workers + static assets, D1, Durable Objects as match referees. No dedicated servers to run. |
 
 **Success:** students choose it over ad-riddled web games, and adults enjoy it too. §15.4 lists measurable proxies.
 
@@ -59,7 +67,7 @@ Use these to settle design arguments. If a feature doesn't serve at least one pi
 1. **Skill over spam.** Timing, movement, and reads beat clicking fast. Wind-ups, catch windows, and limited sprint reward commitment and punish panic. (The model is Mordhau/Chivalry, not Call of Duty.)
 2. **Physics is the comedy.** Ragdolls, trips, faceplants, and flying inflatables should produce stories students retell at lunch. The comedy must never make outcomes feel random: *knockouts* are rules-based and readable, while *falls* are the physics show.
 3. **In a game in 10 seconds.** Open a URL, click Play, and you're throwing. No install, no account, no ads, no long loads.
-4. **Fair on school Wi-Fi.** Low-end Chromebooks and congested networks are the baseline, not an edge case.
+4. **Fair across the Pacific.** Players in Shenzhen and worldwide should both get a fair match. The netcode is designed for 100–180 ms, not just the ideal.
 5. **Safe by default.** Guests can't talk. Accounts are accountable. The owner can see and act on what happens.
 
 ---
@@ -71,20 +79,23 @@ Use these to settle design arguments. If a feature doesn't serve at least one pi
 - **Secondary:** adults (staff, parents, the wider public through the owner's domain).
 - **Skill spread:** very wide. Bots, easy-to-read rules, and the comedy keep beginners engaged. Catch/block timing and movement tech give experts depth.
 
-### 3.2 Minimum hardware (performance budget baseline)
+### 3.2 Hardware (performance budget baseline)
 | Item | Target |
 |---|---|
-| Reference device | Low-end Chromebook (Intel Celeron/MediaTek class, 4 GB RAM, integrated GPU) |
-| Frame rate | 60 fps at 720p on the reference device with "Low" preset; dynamic resolution allowed down to 540p |
+| Reference device | **MacBook Air M1 (8 GB)**, Safari and Chrome. This is what most students use. |
+| Frame rate | 60 fps at native-scaled resolution (about 1470×956) on the "High" preset, running on battery |
+| Floor device (secondary) | A 2018-era Intel laptop or mid-range Chromebook reaches 60 fps at 720p on "Low", with dynamic resolution down to 540p. It should be playable but isn't the primary target. |
+| Trackpad | Playable with the trackpad (tap to throw, two-finger tap to block, adjustable sensitivity). A mouse is recommended in the tutorial. |
 | Memory | < 500 MB browser tab |
 | Initial download | < 10 MB compressed before the first match can start (arena assets stream after) |
 | Time to first throw | < 10 s from page open on a 10 Mbps connection |
 | GPU API | WebGL2 required; WebGPU optional later |
 
 ### 3.3 Networks
-- **School networks** often block UDP and non-443 ports and run web filters (GoGuardian, Securly, and similar). All gameplay traffic must work over **TLS on port 443**, and the domain may need allow-listing by school IT.
-- **Mainland China:** Google services (Fonts, reCAPTCHA, Analytics, Firebase), Discord, and many CDNs are blocked or unreliable. Nothing on the critical path may depend on them (§13.9).
-- **Latency target:** feels good at ≤ 80 ms RTT, still playable at 150 ms, degrades gracefully to 250 ms.
+- School IT is **out of scope** (owner). The game runs entirely over **HTTPS/WSS on port 443** on `contrapaul.com`, which is already reachable on the school network and in mainland China.
+- **Mainland China:** Google services (Fonts, reCAPTCHA, Analytics, Firebase) and Discord are blocked. Nothing on the critical path may depend on them. Fonts are self-hosted, as in the owner's other sites.
+- **Latency target:** feels good at ≤ 80 ms RTT, still playable at 150 ms, degrades gracefully to 250 ms. Latency from Shenzhen to Cloudflare is the top technical unknown (§13.11).
+- **Load size:** M1 Macs on home broadband make a 10 MB first load comfortable, but slow school Wi-Fi at lunch should still reach a match within about 15 s.
 
 ---
 
@@ -260,7 +271,7 @@ Identical to Classic, except that the camera is locked to first person. It gets 
 - Players wear the **exact uniform shown in their menu** (per spec). No team colours.
 
 ### 5.4 Practice (offline)
-- Single player versus bots in any arena and mode. It runs fully in the browser with no server needed (§13.3).
+- Single player versus bots in any arena and mode. It runs fully in the browser with no server needed (§13.4).
 - Options include bot count, bot difficulty, ball mix, and infinite-balls mode.
 - A **target range** sub-mode offers static and moving targets, plus a catch machine that fires balls at the player on a rhythm for catch/block timing practice.
 - Guests and accounts alike can use it. It earns no Dodgecoins, which prevents farming.
@@ -381,7 +392,7 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - Bot names come from a curated fun list, marked with a `[BOT]` tag.
 
 ### 8.3 Practice mode
-- The full simulation runs in a **Web Worker** on the client, using the same simulation package as the server (§13.3). It works offline once the assets are cached.
+- The full simulation runs in a **Web Worker** on the client, using the same `src/sim` code the Durable Object runs (§13.4). It works offline once the assets are cached.
 
 ---
 
@@ -414,7 +425,7 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - **Proximity model:** full volume within 5 m, fading to silent at 25 m. Team-radio voice (which ignores distance) is available to teammates **[DECISION]**. Knocked-out players can talk only with other knocked-out teammates.
 - **Defaults:** voice is **off** until the player opts in, and push-to-talk is the default. A per-player volume and mute control exists, plus a global "mute all voice" option.
 - **Moderation:** voice cannot be word-filtered in real time. Mitigations are described in §10.5.
-- **Technology:** a WebRTC SFU with client-side spatialisation (§13.6).
+- **Technology:** a WebRTC SFU with client-side spatialisation (§13.7).
 
 ### 9.5 Spectating
 - Knocked-out players spectate as described in §5.1.
@@ -431,13 +442,13 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
   2. The display name is checked against the word filter and the uniqueness rule, and suggestions are offered if it's rejected.
   3. The **Code of Conduct** screen requires the player to scroll to the end, then tick "I have read and agree".
   4. The **How we use your data** screen is plain-language (§10.6), with a checkbox.
-  5. A 6-digit code is emailed to the player to confirm the address.
+  5. A verification link is emailed to the player (the existing Tome of Secrets flow).
   6. The account is created. It gets the bonus uniform and a welcome message.
-- **Login:** email + password. A "remember me" session cookie lasts 30 days.
-- **Password reset** works by emailing a code.
+- **Login and sessions:** exactly as in the owner's other projects (ported code).
+- **Password reset** works by emailing a link (the ported flow).
 - **Display names:** 3–16 characters, drawn from letters, numbers, spaces, underscores, and hyphens. They are unique ignoring case. A player can change their own name once every 30 days **[DECISION]**. Admins can rename anyone at any time (§10.3).
 - **Deleting an account:** players can delete their own account from settings. Their personal data is removed, and chat incident logs are anonymised but kept for the retention period (§10.6).
-- **Passwords** are hashed with Argon2id. Login and sign-up are rate-limited. A captcha that works in China is used on sign-up only (§13.9).
+- **Auth implementation:** ported verbatim from Tome of Secrets (§13.1): PBKDF2-SHA256, hashed session tokens, rate-limited signup/login/reset, verification and reset emails through Resend. The shared `users.username` column is the display name.
 
 ### 10.2 Roles
 | Role | Can do |
@@ -447,10 +458,10 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 | Moderator (e.g. other trusted staff) **[DECISION]** | Review incidents and reports, warn, mute, temp-ban, rename |
 | Admin (owner) | Everything, plus permanent bans, coin/item grants, content and banner management, moderator management |
 
-Moderator and admin logins require **TOTP two-factor authentication**. Every admin action is written to an **audit log**.
+Moderator and admin access is a `role` on the profile, checked on every admin request. Every admin action is written to an **audit log**. TOTP two-factor authentication is optional later.
 
 ### 10.3 Admin dashboard
-A separate web app at `/admin` on its own subdomain.
+Role-gated pages at `/admin`, served by the same Worker.
 
 - **Accounts:** search by name or email. View sign-up date, last seen, matches, coin balance, inventory, name history, warnings, bans, and reports. Actions:
   - rename, with a reason, which notifies the player at their next login: "Your name was changed by a moderator"
@@ -498,7 +509,7 @@ Voice can't be filtered like text, so the plan relies on layers:
   - incident transcripts: 1 year
   - security logs: 30 days
   - deleted accounts: personal data purged within 30 days
-- **Children's data:** see Risk R4 and Open Question Q-S1. Depending on the players' ages and locations, laws such as COPPA (US, under 13), PIPL (China, where under-14 data is "sensitive"), and GDPR-K may apply. **The owner should confirm the approach with the school** before accounts launch.
+- **Children's data:** players are middle and high school students. This is a personal (not official school) project, and the owner has school leadership's approval to share it with students. The plan still collects the minimum data: email, name, and password, the same as the owner's other projects. Voice is off by default and never recorded, which keeps things low-risk for younger users.
 
 ### 10.7 Code of Conduct (outline, final wording by owner)
 1. Be kind. No insults, slurs, harassment, or bullying, in text or voice.
@@ -520,7 +531,7 @@ Voice can't be filtered like text, so the plan relies on layers:
   - Balls are always the most saturated objects in the scene. Environments avoid saturated red, orange, and blue.
   - Live balls have a subtle trail. Dead balls are desaturated.
   - Team outlines are drawn on top of everything.
-- **Lighting:** baked lighting (lightmaps or vertex AO) plus one dynamic directional shadow for players and balls only, which is cheap on Chromebooks. The "Low" preset turns off the dynamic shadow and uses a blob shadow instead.
+- **Lighting:** baked lighting (lightmaps or vertex AO) plus one dynamic directional shadow for players and balls only, which the M1 handles easily. "High" adds SSAO and soft shadows, while the "Low" preset turns off the dynamic shadow and uses a blob shadow instead.
 
 ### 11.2 Character rig
 - **One shared skeleton** with about 15 bones: pelvis, spine, chest, head, and for each side upper arm, forearm, hand, thigh, shin, and foot.
@@ -570,7 +581,7 @@ Voice can't be filtered like text, so the plan relies on layers:
 | `postmatch` | End-of-match screen | 800×200 | Yes |
 
 ### 12.2 Campaigns
-- The admin uploads an image (it's automatically converted to WebP and must be ≤ 200 KB) and sets:
+- The admin uploads an image (stored in R2, WebP/PNG/JPEG, ≤ 200 KB) and sets:
   - a title
   - the target slots
   - start and end dates/times
@@ -584,240 +595,294 @@ Voice can't be filtered like text, so the plan relies on layers:
 
 ---
 
-## 13. Technical Architecture (Proposal)
+## 13. Technical Architecture
 
-> `plans.md` says "To be completed — ask me about this." This section is a **recommendation** with rationale. [§17.1](#171-technology) lists the specific decisions that need the owner's input.
+> **Revised v0.2 (owner feedback):** no dedicated game servers. DuoShan uses the same serverless Cloudflare platform as the owner's other projects (Tome of Secrets, Flashstone, make/bloodbowl, time):
+> - **Workers with static assets** serve the game.
+> - **D1** stores accounts and game data.
+> - The **auth code** is ported verbatim from Tome of Secrets.
+> - **Durable Objects** run the real-time matches, as Flashstone's `workers/realtime` does.
+>
+> The client is **TypeScript + Three.js**, as agreed.
 
-### 13.1 Recommended stack
+### 13.1 Stack
 
-| Layer | Recommendation | Why | Alternatives |
-|---|---|---|---|
-| Language | **TypeScript** everywhere | The simulation code can be shared between client, server, and practice mode. One language. | — |
-| Rendering | **Three.js** (WebGL2) | Small, mature, performant on low-end GPUs, full control | Babylon.js (heavier, more batteries included); PlayCanvas |
-| Physics | **Rapier 3D (WASM)** | Fast, runs identically in browser and Node, supports joints for ragdolls, has deterministic mode | Havok (via Babylon); cannon-es (slower, JS) |
-| Client build | **Vite** | Fast builds, good code-splitting for arena assets | — |
-| UI (menus/HUD) | **Preact** or plain DOM + CSS | Tiny bundle, easy menus | React (bigger), Svelte |
-| Game server | **Node.js 22 LTS**, custom room server | Runs the same TS simulation authoritatively | Colyseus (rooms/matchmaking built in, but its state sync fights custom prediction); Rust/Go (no shared sim code) |
-| Transport | **WebSocket over TLS (443)**, binary messages; **WebTransport** later as an optional upgrade | WebSocket works through school firewalls and in China. WebTransport (UDP/QUIC) is lower latency but often blocked on school networks. | geckos.io (WebRTC data channels, UDP) |
-| API server | **Node + Fastify** | Accounts, shop, moderation, banners | — |
-| Database | **PostgreSQL 16** | Relational data (accounts, ledger, incidents), reliable | — |
-| Cache / presence | **Redis** (optional in phase 1) | Room directory across multiple game servers, rate limits | In-memory while there's one server |
-| Voice | **LiveKit (self-hosted, open source)** WebRTC SFU | Self-hostable (works in China), token auth, selective subscription for proximity, TURN over TLS 443 | Agora (strong China presence, paid, a third party); mediasoup (lower level) |
-| Admin app | **Preact/React + a simple component library** | Internal tool, doesn't need to be tiny | Server-rendered pages |
-| Email | Transactional provider with good delivery to QQ/163/school domains (§13.9) | Account verification and recovery | — |
-| Hosting | **Hong Kong** region VPS/cloud (§13.9) | Best latency for mainland China without an ICP licence | Singapore; mainland (needs an ICP licence) |
-| Reverse proxy / TLS | **Caddy** | Automatic HTTPS, simple configuration | nginx + certbot |
-| Error tracking | **Self-hosted GlitchTip** (Sentry-compatible) | Reachable from China, private | Sentry SaaS (reachability varies) |
-| Analytics | **Self-hosted Umami/Plausible**, or none | No third-party trackers | — |
-| CI/CD | **GitHub Actions** → Docker images → deploy script | The repository already lives on GitHub | — |
-| Tests | **Vitest** (unit and simulation), **Playwright** (browser smoke and bot matches) | — | — |
+| Layer | Choice | Notes |
+|---|---|---|
+| Language | **TypeScript** everywhere | The simulation is shared by browser, Durable Object, practice mode, and tests |
+| Rendering | **Three.js** (WebGL2) | Agreed with owner |
+| Client build | **Vite** + **Vitest** | Same as Tome of Secrets |
+| UI (menus/HUD) | Plain TS + DOM/CSS | As in Tome's `src/ui/kit`; no framework needed |
+| Hosting | **Cloudflare Workers + static assets**, custom domain on `contrapaul.com` (proposed `duoshan.contrapaul.com`) | Tome of Secrets layout: `wrangler.jsonc` with `assets` + `run_worker_first: ["/api/*", "/rt/*"]` |
+| Real-time matches | **Durable Objects** (SQLite-backed): one `GameRoom` per room, plus a `Directory` for Quick Play and room codes | "Serverless game server". It's created on demand, sleeps when empty, and needs no machines to manage. |
+| Database | **D1** | Accounts, coins, inventory, moderation, banners |
+| Accounts / auth | **Ported verbatim** from `tomeofsecrets/worker/lib`: `crypto.ts` (PBKDF2-SHA256 100k), `session.ts` (hashed tokens, HttpOnly cookie), `ratelimit.ts`, `email.ts` (Resend) | Plus the same four shared tables (`users`, `sessions`, `auth_tokens`, `rate_limits`). "Reviewed and in production. Do not improve it." |
+| Gameplay physics | **Custom lightweight TS physics** inside `src/sim` (spheres vs boxes/capsules/planes) | Runs in the Durable Object. See §13.4 for why not Rapier here. |
+| Cosmetic physics | **Rapier 3D (WASM), client only** | Ragdolls, knockout flops, trip tumbles, debris |
+| Voice | **Cloudflare Realtime** (serverless WebRTC SFU + TURN), with signalling through the `GameRoom` DO | Needs a spike (§13.7). The fallback is peer-to-peer WebRTC. |
+| Banner images | Static assets for defaults. Admin uploads go to **R2** (Cloudflare object storage). | |
+| Observability | Workers `observability` (as Tome has it enabled) plus a small `/api/telemetry` endpoint | No third-party trackers |
+| CI | GitHub Actions: typecheck, lint, test, boundary check, build | Same `npm run check` shape as Tome |
 
-### 13.2 System overview
+### 13.2 Does Rapier need a server? (owner's question)
+
+**No.** Rapier is a physics *library*, not a service. It runs wherever you call it: a browser tab, a Web Worker, or a Durable Object.
+
+The real question is **who runs the authoritative simulation**, meaning which copy of the game decides "that ball hit you". For a fair action game, one copy must be the referee. Otherwise two players' screens disagree, and a cheater can simply claim hits. In this plan the referee is the **`GameRoom` Durable Object**: one per match, started on demand by Cloudflare, with nothing to rent or maintain.
+
+**What the referee simulates, and why it's a custom physics system rather than Rapier:**
+- The gameplay-critical physics is narrow: players are **capsules** moving on floors, ramps, and against walls, and balls are **spheres** bouncing off boxes, planes, and capsules. Inflatables are a few large bodies that slide and tip on the ground plane. About 1–2k lines of well-tested TS covers this.
+- Custom TS runs *identically* in the browser (for prediction) and in the DO (for authority). That makes client prediction accurate and is easy to unit-test.
+- It avoids loading a WASM binary into the Worker. Workers restrict runtime WASM compilation, `rapier3d-compat` embeds its WASM as base64 and compiles at runtime, and bundle size limits apply. It also keeps DO CPU time low, which keeps ticks steady and costs down.
+- **Rapier still does the fun part**: every ragdoll, faceplant, twirl, and flip is simulated in the browser from the referee's event (impact point, force, random seed). All players therefore see the same *kind* of comedic reaction, while the outcome (knocked out, tripped for 1.5 s) is decided by the referee.
+- **Escape hatch:** if custom physics proves too limited (Neighborhood inflatables are the likely pressure point), the Phase 0 spike also checks running Rapier's non-compat WASM build inside a DO, imported as a WASM module.
+
+### 13.3 System overview
 
 ```
-                         ┌──────────────────────────────────────────────┐
-  Browser (student)      │  Hong Kong region                            │
- ┌──────────────────┐    │                                              │
- │ Game client      │    │  ┌────────────┐   ┌──────────────────────┐   │
- │  Three.js render │HTTPS  │  Caddy     │──▶│ Static assets (+CDN) │   │
- │  Rapier predict  │──────▶│  TLS :443  │   └──────────────────────┘   │
- │  UI (Preact)     │    │  │            │   ┌──────────────────────┐   │
- │  Practice worker │ WSS│  │            │──▶│ API (Fastify)        │──┐│
- │  (sim + bots)    │──────▶│            │   │ accounts/shop/mod/   │  ││
- │                  │    │  │            │   │ banners/matchmaking  │  ││
- │  Voice (WebRTC)  │    │  │            │   └──────────────────────┘  ││
- └────────┬─────────┘    │  │            │   ┌──────────────────────┐  ││
-          │              │  │            │──▶│ Game server(s) (Node)│──┤│
-          │              │  └────────────┘   │ rooms, authoritative │  ││
-          │  WebRTC/TURN │                   │ sim, bots, chat      │  ││
-          └──────────────┼──▶┌───────────┐   └──────────────────────┘  ││
-                         │   │ LiveKit   │   ┌──────────┐ ┌─────────┐  ││
-                         │   │ SFU+TURN  │   │PostgreSQL│ │ Redis   │◀─┘│
-                         │   └───────────┘   └──────────┘ └─────────┘   │
-                         └──────────────────────────────────────────────┘
-  Admin (owner) ──HTTPS──▶ admin.<domain> → API (role: admin/mod, TOTP)
+ Browser (MacBook Air etc.)                     Cloudflare (serverless)
+┌────────────────────────────┐         ┌──────────────────────────────────────────┐
+│ Three.js renderer          │  HTTPS  │ Worker: duoshan.contrapaul.com            │
+│ Rapier (ragdolls only)     │────────▶│  • static assets (game, arenas, audio)    │
+│ src/sim (prediction)       │         │  • /api/*  auth, profile, shop, coins,    │
+│ Practice: src/sim in a     │         │            moderation, admin, banners     │
+│   Web Worker + bots        │         │  • /rt/*   ticket check → Durable Object  │
+│                            │   WSS   │                                            │
+│ Net client ────────────────┼────────▶│  Durable Object: GameRoom (one per room)  │
+│                            │         │   authoritative src/sim @ 60 Hz, bots,     │
+│                            │         │   chat + filter, voice signalling          │
+│                            │         │  Durable Object: Directory                 │
+│                            │         │   room codes, Quick Play, public list      │
+│ Voice (WebRTC) ────────────┼────────▶│  Cloudflare Realtime SFU / TURN            │
+└────────────────────────────┘         │  D1: users, coins, items, incidents, …     │
+                                       │  R2: uploaded banner images                │
+ Owner ──▶ /admin (same Worker, role-gated) ──▶ D1                                  │
+                                       └──────────────────────────────────────────┘
 ```
 
-### 13.3 Repository layout (monorepo, pnpm workspaces)
+**Deployment shape:** Tome of Secrets already uses **Workers with static assets** rather than Pages. Because of that, the **Durable Object classes can live in the same Worker**. No separate realtime Worker, no cross-origin ticket secret shared between two projects, and one `wrangler deploy`. This avoids the Pages limitation that forced Flashstone into two deployments (Flashstone `PHASE-5-MULTIPLAYER.md` §1, Option B). A **signed join ticket** (Flashstone's `ticket.ts` pattern) is still used when the socket connects, so the DO knows who the player is.
+
+### 13.4 Repository layout (single package, Tome of Secrets style)
 
 ```
 duoshan/
-├─ apps/
-│  ├─ client/          # Vite + Three.js game client, menus, HUD
-│  ├─ server/          # Authoritative game server (rooms, netcode, chat relay)
-│  ├─ api/             # Fastify: auth, profiles, shop, moderation, banners, room directory
-│  └─ admin/           # Moderation & content dashboard
-├─ packages/
-│  ├─ sim/             # Shared game simulation: rules, movement, balls, Rapier world
-│  │                   #   (runs in server, client prediction, and practice Web Worker)
-│  ├─ protocol/        # Binary message schemas, bit-packing, versioning
-│  ├─ content/         # Data definitions: balls, arenas, uniforms, modes (stable IDs)
-│  ├─ bots/            # Bot AI → produces standard inputs
-│  ├─ filter/          # Chat/name normalisation + matching (shared by server & api)
-│  └─ shared/          # Math, constants, types, utils
-├─ assets/             # Source art (MagicaVoxel .vox, Blender .blend), audio masters
-├─ tools/              # arena-export, skin-check, audio-pack, load-test bots
-├─ infra/              # docker-compose, Caddy, deploy scripts, backups
-├─ docs/               # This plan, CoC, privacy policy, skins how-to, runbooks
-├─ plans.md            # Original brief
-└─ PROJECT_PLAN.md     # This file
+├─ src/
+│  ├─ sim/          # PURE game simulation: rules, movement, balls, custom physics.
+│  │                #   No DOM, no Three.js, no Rapier. Runs in DO, browser, worker, tests.
+│  ├─ content/      # Data definitions: balls, arenas, uniforms, modes (stable IDs)
+│  ├─ bots/         # Bot AI → standard inputs (pure; runs in DO and practice worker)
+│  ├─ net/          # Protocol (binary codec + Zod for control msgs), client, prediction
+│  ├─ filter/       # Chat/name normalisation + matching (pure; used by DO and API)
+│  ├─ render/       # Three.js scene, characters, ragdolls (Rapier), effects, outlines
+│  ├─ audio/        # Web Audio mixer, spatial audio, voice spatialisation
+│  ├─ ui/           # Menus, HUD, settings, shop, lobby UI
+│  └─ app/          # Boot, router, account (ported from Tome), settings, practice worker
+├─ worker/
+│  ├─ index.ts      # fetch handler: /api/*, /rt/*, exports GameRoom + Directory
+│  ├─ lib/          # crypto.ts, session.ts, ratelimit.ts, email.ts, http.ts — VERBATIM from Tome
+│  ├─ routes/       # auth, profile, shop, coins, reports, admin, banners, telemetry
+│  └─ rooms/        # GameRoom.ts, Directory.ts
+├─ db/migrations/   # 0001_init.sql (shared auth tables verbatim) + DuoShan tables; append-only
+├─ public/          # static assets: arenas (glTF), audio, UI art
+├─ art-src/         # MagicaVoxel/Blender sources, uniform template
+├─ tools/           # arena-export, skin-check, audio-pack, headless sim, load-test bots
+├─ scripts/         # check-boundary.mjs (sim/bots/filter must not import DOM/Three/Rapier)
+├─ docs/            # plan phases, decisions, CoC, privacy, skins how-to
+├─ CLAUDE.md        # same guidelines file as the other projects
+├─ wrangler.jsonc
+├─ plans.md         # original brief
+└─ PROJECT_PLAN.md  # this file
 ```
 
-The **key architectural bet** is that `packages/sim` is a pure, deterministic-as-possible simulation (`step(state, inputs, dt) → state + events`). It has no rendering and no networking. It runs:
-- on the **server** as the authority
-- on the **client** for prediction of the local player
-- in a **Web Worker** for offline practice
+The key architectural bet is that **`src/sim` is pure**: `step(state, inputs, dt) → state + events`. A boundary check (as in Tome's `check:boundary` and Flashstone's engine test) fails CI if it ever imports DOM, Three.js, or Rapier. The same code runs:
+- in the **`GameRoom` DO** as the referee
+- in the **browser** for local-player prediction
+- in a **Web Worker** for offline Practice with bots
+- in **headless tests**, where bot-vs-bot matches run in CI
 
-It's also used in **headless tests**, where bot-vs-bot matches run in CI.
-
-### 13.4 Simulation and netcode
+### 13.5 Netcode
 
 | Parameter ◆ | Value |
 |---|---|
-| Server simulation tick | 60 Hz |
-| Snapshot send rate | 30 Hz (20 Hz under load) |
-| Client input send | Every tick, batched 2 per packet, plus the last 3 inputs repeated for loss resilience |
-| Remote entity interpolation buffer | ~100 ms (adaptive to jitter) |
-| Max lag compensation rewind | 200 ms |
-| Target bandwidth | ≤ 20 KB/s down and ≤ 5 KB/s up per client at 8v8 |
+| DO simulation tick | 60 Hz (fixed step, `setInterval` loop while players are connected) |
+| Snapshot broadcast | 20–30 Hz (adaptive) |
+| Client input send | **30 Hz**, each packet carrying the last 2 ticks of input plus 2 redundant earlier ones. This halves billable WebSocket messages compared with 60 Hz (§13.10). |
+| Remote interpolation buffer | ~100 ms, adaptive to jitter |
+| Max lag-compensation rewind | 200 ms |
+| Bandwidth | ≤ 20 KB/s down, ≤ 3 KB/s up per client at 8v8 |
 
-**Model:** a server-authoritative simulation with client-side prediction and server reconciliation.
+**Model:** a server-authoritative simulation (in the DO) with client-side prediction and reconciliation.
 
-- **Local player movement:** the client predicts it immediately and reconciles against server snapshots. It replays unacknowledged inputs, and small errors are smoothed over about 100 ms.
-- **Remote players:** interpolated between snapshots, so they are shown slightly in the past.
+- **Local player movement:** predicted immediately with the same `src/sim` code and reconciled against snapshots. Unacknowledged inputs are replayed, and errors are smoothed over about 100 ms.
+- **Remote players:** interpolated between snapshots, so they're shown slightly in the past.
 - **Balls in flight — the hard part:**
-  - Ballistic flight is predictable, so clients **forward-predict flying balls to the estimated current server time** instead of interpolating them in the past. Players then see incoming balls *where they actually are*, which is essential for dodging and catch timing.
-  - When a ball hits something, the server's authoritative event corrects the client, and the correction is smoothed.
-  - **Your own throw** appears instantly on your client, predicted from your input. The server confirms it with a network ID. If the server rejects the throw (for example, because you'd been knocked out before throwing), the predicted ball fades out.
+  - Clients **forward-predict flying balls to the estimated current server time**. Incoming balls are drawn *where they really are*, which is essential for dodging and catch timing.
+  - Collisions are corrected by the authoritative event, with smoothing.
+  - Your own throw appears instantly (predicted). If the referee rejects it, the ball fades out.
 - **Catch and block adjudication (favour the defender, bounded):**
-  - Each input carries the client's tick number.
-  - The server validates a catch or block attempt against the ball's position at the tick the defender *saw*, using server-side history rewound by up to 200 ms.
-  - If the catch was valid from the defender's view and the ball has not yet been confirmed as hitting anyone else in the meantime, the catch wins.
-  - This resolves the classic "I caught it on my screen" complaint.
-- **Hits on players:** evaluated in present server time against server-side hitboxes. Forward-predicted balls keep this consistent with what dodgers see.
-- **Ragdolls:**
-  - **Knockout ragdolls are cosmetic.** Each client simulates them locally from a server event that carries the impact point, velocity, and random seed. Only the *knocked-out* state is authoritative. Knocked-out ragdolls don't affect live balls or players, which keeps them cheap and fair.
-  - **Trips are authoritative in effect, cosmetic in look.** The server tracks each tripped player as a simple capsule that slides or tumbles to a rest position and runs the timer. Clients render a ragdoll that is loosely constrained to that capsule.
-  - This rule matters for the centerline: crossing the line during a trip uses the server capsule.
-- **Physics props** (Neighborhood inflatables): simulated by the server and interpolated on clients. Ownership is never transferred.
-- **Determinism:** Rapier's cross-platform determinism is used where possible, so reconciliation errors stay tiny. Correctness never *depends* on determinism, because the server is always the authority.
+  - Each input carries its client tick.
+  - The DO checks a catch or block against the ball's position at the tick the defender *saw*, using up to 200 ms of history.
+  - The catch wins if it was valid from the defender's view and the ball hadn't already been confirmed hitting someone else. This fixes the "I caught it on my screen" complaint.
+- **Hits on players:** evaluated in present DO time against authoritative capsules.
+- **Ragdolls are cosmetic** (Rapier, client-side), driven by the referee's event and seed. **Trips** are authoritative in effect: the DO moves a tumbling capsule and runs the timer, and the client ragdoll is loosely pinned to that capsule. Centerline crossing during a trip uses the DO capsule.
+- **Inflatables:** simulated by the DO and interpolated on clients.
 - **Protocol:**
-  - Binary, bit-packed messages with quantised positions (1 cm) and rotations (smallest-three quaternions).
-  - Delta-compressed against the last snapshot the client acknowledged.
-  - A version handshake means old clients are asked to refresh after a deploy.
-- **Anti-cheat (server authority covers most of it):**
-  - The server validates inputs: move vectors are clamped, and view angles can change at most a set amount per tick.
-  - The server alone decides throws, catches, and knockouts. Clients can't teleport, speed-hack, or spawn balls.
-  - Aim-assist cheats are possible (as in any shooter) but have less impact here, because wind-up, spread, and travel time dominate outcomes. Reporting is the backstop.
-  - Rate limits apply to messages, room creation, and room-code guessing.
+  - Gameplay messages are **binary** (bit-packed, 1 cm position quantisation, smallest-three quaternions, delta against the last acknowledged snapshot).
+  - Control messages (join, chat, lobby) are JSON validated with **Zod**, the Flashstone pattern.
+  - A version handshake forces a refresh after a deploy.
+- **Anti-cheat:** the referee alone decides throws, catches, and knockouts. Inputs are clamped (move vectors, maximum turn rate). Messages and chat are rate-limited.
 
-### 13.5 Game server design
-- A single Node process hosts many rooms, and each room runs its own fixed-step loop. Rooms are pinned to worker threads (one per CPU core) so that one room's slow tick can't stall the others.
-- **Capacity estimate** ◆: one core runs 8–15 Classic rooms at 16 players, because the server has no ragdolls, only capsules plus balls. A 4-vCPU server therefore handles about 400+ concurrent players. **This must be measured** with a load-test bot harness in Phase 2.
-- **Room lifecycle:** Lobby → Countdown → Round (Active) → Round End → … → Match End → back to Lobby (the same room code persists so friends can rematch).
-- **Matchmaking** lives in the API. It keeps a room directory (in memory, or in Redis once there are multiple servers) and returns `{server URL, room ID, join token}`.
-- **Chat relay** runs in the game server, which applies the filter from `packages/filter`. Incidents are posted to the API asynchronously.
+### 13.6 Durable Objects in detail
 
-### 13.6 Voice architecture
-- The API issues **LiveKit tokens** only to accounts in good standing that have voice enabled. Each room code maps to a LiveKit room.
-- **Proximity:** every client subscribes only to the audio tracks of participants within 30 m, using positions from game snapshots. It spatialises them with Web Audio, which saves bandwidth and CPU on Chromebooks.
-- **Team radio and knocked-out channels** are implemented as subscription rules plus volume logic on the client. The server enforces permissions through LiveKit token grants and track subscription permissions.
-- **TURN over TLS on 443** gets through school firewalls.
+- **`GameRoom`:** one instance per room code, addressed with `idFromName(code)`.
+  - It owns the room lifecycle: Lobby → Countdown → Round → Round End → … → Match End → Lobby (the same code, so friends can rematch).
+  - It runs the 60 Hz loop only while at least one human is connected. When empty for 5 minutes it saves nothing important and lets itself be evicted. Match results are written to D1 at match end.
+  - It also runs bots, chat with the filter and the round transcript buffer, the **incident writes to D1**, join-in-progress, and reconnect. A dropped socket reconnects into the same slot within 60 s, as Flashstone's `MatchRoom` already does.
+  - It runs voice signalling and proximity rules, and pays out Dodgecoins at match end, idempotently per match ID. Flashstone's room already pays gold this way.
+- **`Directory`:** a single instance.
+  - It keeps a map of public rooms (mode, player count, region, phase), updated by `GameRoom`s every few seconds.
+  - It serves Quick Play ("find a public room of mode X in my region with space, else create one"), reserves room codes, and checks the codes are unique.
+- **Placement (worldwide + Shenzhen):**
+  - A DO lives in one Cloudflare location, chosen when it's first created. `GameRoom`s are created with a **`locationHint`** from the creator's region, using `request.cf.continent`/`country`. Mainland China and the rest of Asia map to `apac`.
+  - Players in Shenzhen therefore play on an Asia-Pacific room, while a group in Europe gets a European room.
+  - Quick Play prefers rooms in the player's own region.
+- **Limits to design around** ◆ (verify current Cloudflare limits during Phase 0):
+  - A DO is single-threaded. 16 players with 12 balls on custom physics is well under 1 ms per tick. That's a reason for custom physics over WASM here.
+  - DO memory is 128 MB, which is ample.
+  - WebSocket messages per second per DO are fine at 16 × 30 Hz.
 
-### 13.7 Data model (initial)
+### 13.7 Voice (proximity)
+- **Primary:** **Cloudflare Realtime SFU + TURN** (serverless, pay-as-you-go with a free monthly allowance).
+  - The Worker issues SFU sessions only to accounts in good standing that have voice enabled.
+  - The `GameRoom` DO tells each client **which tracks to subscribe to** (players within about 30 m, plus team radio and knocked-out-teammates rules). The client spatialises them with Web Audio, fading from full volume at 5 m to silent at 25 m.
+- **Fallback:** **peer-to-peer WebRTC** audio, with the `GameRoom` DO as the signalling server and Cloudflare TURN for hard networks. Proximity limits keep each player connected to only a few peers at once, and M1 MacBooks handle that easily.
+- **Risk:** WebRTC reachability from mainland China is the unknown, so a **spike before Phase 6** decides which to use (Risk R5).
 
+### 13.8 Data model (D1 / SQLite)
+
+`0001_init.sql` starts with the **four shared auth tables verbatim** from Tome of Secrets (`users`, `sessions`, `auth_tokens`, `rate_limits`), so the ported code works unchanged. DuoShan's own tables follow, and migrations are **append-only**, as in the other projects.
+
+```sql
+-- DuoShan additions (sketch)
+CREATE TABLE profiles (          -- one row per user
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'player' CHECK (role IN ('player','moderator','admin')),
+  skin_tone INTEGER NOT NULL DEFAULT 0,
+  uniform_id TEXT NOT NULL DEFAULT 'uniform.basic',
+  coins INTEGER NOT NULL DEFAULT 0,           -- cache of SUM(coin_ledger.delta)
+  voice_enabled INTEGER NOT NULL DEFAULT 0,
+  voice_revoked INTEGER NOT NULL DEFAULT 0,
+  text_muted_until INTEGER, banned_until INTEGER, ban_reason TEXT,
+  name_changed_at INTEGER, created_at INTEGER NOT NULL);
+
+CREATE TABLE owned_items (       -- item_id is a free-text stable slug; never enumerate the catalogue
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL, source TEXT NOT NULL, acquired_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, item_id));
+
+CREATE TABLE coin_ledger (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, delta INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('earn','spend','grant','refund','adjust')),
+  reason TEXT, match_id TEXT, admin_id TEXT, created_at INTEGER NOT NULL,
+  UNIQUE (user_id, match_id, kind));        -- idempotent match payouts
+
+CREATE TABLE matches (id TEXT PRIMARY KEY, room_code TEXT, mode TEXT, arena_id TEXT,
+  started_at INTEGER, ended_at INTEGER, result TEXT /* JSON */);
+CREATE TABLE match_players (match_id TEXT, user_id TEXT, guest_label TEXT, team TEXT,
+  score INTEGER, kos INTEGER, catches INTEGER, blocks INTEGER, assists INTEGER, coins INTEGER);
+
+CREATE TABLE name_history (id TEXT PRIMARY KEY, user_id TEXT, old_name TEXT, new_name TEXT,
+  changed_by TEXT, reason TEXT, changed_at INTEGER);
+
+CREATE TABLE chat_incidents (id TEXT PRIMARY KEY, match_id TEXT, round_no INTEGER,
+  room_code TEXT, created_at INTEGER, status TEXT DEFAULT 'open', reviewed_by TEXT,
+  reviewed_at INTEGER, note TEXT);
+CREATE TABLE chat_incident_messages (incident_id TEXT, seq INTEGER, sent_at INTEGER,
+  user_id TEXT, display_name TEXT, team TEXT, channel TEXT,
+  original_text TEXT, delivered_text TEXT, flagged INTEGER,
+  PRIMARY KEY (incident_id, seq));
+
+CREATE TABLE reports (id TEXT PRIMARY KEY, reporter_id TEXT, reported_id TEXT, match_id TEXT,
+  category TEXT, note TEXT, context TEXT, status TEXT DEFAULT 'open', created_at INTEGER);
+CREATE TABLE moderation_actions (id TEXT PRIMARY KEY, user_id TEXT, action TEXT, reason TEXT,
+  expires_at INTEGER, acknowledged_at INTEGER, created_by TEXT, created_at INTEGER);
+CREATE TABLE banned_words (id TEXT PRIMARY KEY, pattern TEXT, match_type TEXT, lang TEXT);
+CREATE TABLE allowed_words (word TEXT PRIMARY KEY);
+
+CREATE TABLE banner_campaigns (id TEXT PRIMARY KEY, title TEXT, image_key TEXT /* R2 */,
+  link_url TEXT, slots TEXT /* JSON */, audience TEXT, starts_at INTEGER, ends_at INTEGER,
+  weight INTEGER, views INTEGER DEFAULT 0, clicks INTEGER DEFAULT 0);
+
+CREATE TABLE audit_log (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT, target TEXT,
+  details TEXT, created_at INTEGER);
 ```
-accounts(id, email UNIQUE, email_verified_at, display_name, display_name_lower UNIQUE,
-         password_hash, skin_tone, role, created_at, last_seen_at, voice_enabled,
-         voice_revoked, text_muted_until, deleted_at)
-sessions(id, account_id, created_at, expires_at, ip_hash, user_agent)
-email_codes(id, account_id|email, purpose[verify|reset], code_hash, expires_at, used_at)
-name_history(id, account_id, old_name, new_name, changed_by, reason, changed_at)
 
-items(id TEXT PK /* stable slug e.g. 'uniform.sportsday_2026' */, kind, rarity,
-      price_coins, released_at, retired_at, metadata JSONB)
-entitlements(account_id, item_id, source[starter|shop|grant|event], acquired_at,
-             PRIMARY KEY(account_id, item_id))
-loadouts(account_id PK, uniform_item_id, accessory_item_id, ...)
-coin_ledger(id, account_id, delta, kind[earn|spend|grant|refund|adjust], reason,
-            match_id NULL, admin_id NULL, created_at)   -- balance = SUM(delta), cached on accounts
+- **Content-safe accounts:** item IDs are stable slugs that are never reused or deleted, only *retired*. A missing item falls back to the basic uniform. No migration ever lists the catalogue, following Flashstone's `card_id` rule.
+- `GameRoom` DOs read the word list from D1 on start (cached, refreshed every 60 s), so admin edits apply live.
 
-matches(id, room_code, mode, arena_id, started_at, ended_at, result JSONB)
-match_players(match_id, account_id NULL, guest_label NULL, team, score, kos, catches,
-              blocks, assists, coins_awarded)
+### 13.9 Security checklist
+- **Auth** uses the Tome code as-is: PBKDF2 at 100k iterations, hashed session tokens in HttpOnly + Secure cookies, and rate limits on signup, login, reset, and verify.
+- **Join tickets:** short-lived HMAC tickets (user or guest ID + room + expiry) are verified by the DO when the socket connects. Guests get a signed guest ID stored in `localStorage`.
+- **Admin routes** check `profiles.role` on every request, and every action is written to `audit_log`. Optional TOTP later. Given the owner is the only admin, and CLAUDE.md prefers simplicity, it's not needed at first.
+- **Uploads** go to R2 through an admin-only route, with type and size limits (≤ 200 KB, WebP/PNG/JPEG).
+- **Rate limits** cover chat, room creation, and room-code lookups (code guessing).
 
-chat_incidents(id, match_id, round_no, room_code, created_at, status[open|actioned|dismissed],
-               reviewed_by, reviewed_at, resolution_note)
-chat_incident_messages(incident_id, seq, sent_at, account_id, display_name, team,
-                       channel, original_text, delivered_text, flagged BOOL)
-reports(id, reporter_id, reported_id, match_id, category[text|voice|name|cheating|other],
-        note, created_at, status, context JSONB)
-moderation_actions(id, account_id, action[warn|mute_text|mute_voice|revoke_voice|ban|unban|rename],
-                   reason, expires_at, acknowledged_at, created_by, created_at)
-banned_words(id, pattern, match_type[word|substring], language, created_by, created_at)
-allowed_words(id, word)
+### 13.10 Cost estimate (Cloudflare) ◆ (verify current pricing in Phase 0)
+- The **Workers Paid plan (~$5/month)** is expected to be needed. Long-running game rooms exceed the free daily Durable Object allowances quickly.
+- **What's billed:**
+  - DO **wall-clock duration** while a room is active: roughly 450 GB-s per room-hour at 128 MB.
+  - **Incoming** WebSocket messages, billed as requests at 20 messages to 1 request. A full 16-player room at 30 Hz input is roughly 86k billable requests per hour.
+  - D1 reads and writes are tiny.
+- **Example:** 5 full rooms × 2 hours per school day × 22 days = 220 room-hours per month. That's about 19M requests and 100k GB-s, which comes to **roughly $5–10/month on top of the $5 plan**. Bot-heavy rooms with few humans cost far less.
+- **Voice:** Cloudflare Realtime/TURN egress is charged per GB after a free allowance. Voice ships last, so its cost is measured in Phase 6.
+- **No machines to rent, patch, or back up.** D1 has Time Travel point-in-time restore.
 
-banner_campaigns(id, title, image_url, link_url NULL, slots TEXT[], audience,
-                 starts_at, ends_at, weight, created_by, views, clicks)
+### 13.11 Latency: Shenzhen and worldwide
+- The owner confirms the domain is accessible from mainland China. **Accessibility isn't the same as latency, though.** On standard Cloudflare plans, mainland traffic is not served from mainland data centres, and it is sometimes routed to distant PoPs (e.g. US West) rather than Hong Kong. A real-time game is far more sensitive to this than a card game or a website.
+- **Phase 0 spike S2 measures it:**
+  - Deploy an echo `GameRoom` (with `locationHint: apac`) and measure WebSocket RTT and jitter **from the school in Shenzhen**, from home connections there, and from overseas.
+  - Also compare connecting via `duoshan.contrapaul.com` with a `*.workers.dev` hostname.
+- **Decision rule:**
 
-audit_log(id, actor_id, action, target_type, target_id, details JSONB, created_at)
-```
+| Measured median RTT from Shenzhen | Plan |
+|---|---|
+| ≤ 100 ms | Proceed as designed |
+| 100–180 ms | Proceed. The netcode above (forward-predicted balls, defender-favoured catches) is built for this. Tune catch and block windows wider. Also add **Local Host mode** (below) for in-school play. |
+| > 180 ms or unstable | Make **Local Host mode** the default for school play, with Cloudflare rooms for worldwide play |
 
-Design rules for content-safe accounts (per spec, "accounts must not be affected by content updates"):
-- Items use **stable string IDs** that are **never reused or deleted**. They are only *retired* (hidden from the shop, still owned and equippable).
-- If a loadout references a missing item, the client falls back to the basic uniform and never errors.
-- **Database migrations** are versioned (e.g. with Kysely/Drizzle migrations) and are additive by default.
+- **Local Host mode (fallback, cheap to add because of the pure sim):**
+  - One player's browser runs `src/sim` as the referee, the same code as the DO.
+  - The other players connect **peer-to-peer over WebRTC data channels**. The `GameRoom` DO only does matchmaking and signalling, with Cloudflare TURN as backup.
+  - Students on the same school network get single-digit-millisecond latency.
+  - Trade-offs:
+    - The host has zero latency, a slight advantage.
+    - A host leaving ends or migrates the match.
+    - A malicious host could cheat, which is acceptable among classmates.
+  - Coins and incidents are still reported to the API, and coin payouts from host-run matches are capped.
 
-### 13.8 Security checklist
-- Argon2id password hashing. Sessions live in httpOnly, Secure, SameSite=Lax cookies, with CSRF tokens on state-changing API calls.
-- Game-server join uses short-lived signed **join tokens** (JWT, 60 s) issued by the API. Guests get a signed guest token.
-- Rate limits cover login, sign-up, chat, room creation, and code lookup.
-- Admin has TOTP 2FA, an IP allow-list option, an audit log, and a separate subdomain.
-- Uploaded banner images are re-encoded server-side, which strips metadata and any payloads.
-- There is a Content-Security-Policy with no inline scripts, and dependency scanning via Dependabot.
-- Nightly encrypted **database backups** go off-server. Restores are tested monthly.
+### 13.12 Observability and testing
+- **Server:** Workers observability logs, plus DO metrics posted to D1 or Workers Analytics Engine every minute: tick p99, players, rooms, reconnects, catch-rewind use.
+- **Client telemetry** (anonymous): fps, frame-time p95, RTT, packet loss, sent to `/api/telemetry`.
 
-### 13.9 China reachability plan
-- **Hosting:** Hong Kong, on a provider with **CN2 GIA / premium China routing**. Candidates include Alibaba Cloud HK, Tencent Cloud HK (Lighthouse), and HK VPS providers with CN2 GIA. Typical RTT from Shanghai/Shenzhen is 20–60 ms, and from Beijing 40–80 ms.
-  - Hosting *inside* mainland China would give the best latency, but it needs an **ICP filing (备案)**, which in practice requires a mainland entity or resident and a mainland host. This is **not recommended for v1**.
-- **No blocked dependencies:**
-  - fonts are self-hosted
-  - no Google APIs, reCAPTCHA, Firebase, or YouTube embeds
-  - no third-party analytics
-  - the captcha must work in China, e.g. self-hosted **Cap / ALTCHA proof-of-work** (no third party) **[DECISION]**
-- **CDN:** static assets are served from the HK origin at first. If needed later, a CDN with good China performance (Cloudflare's China Network needs an Enterprise plan and ICP, so it's unsuitable) or Alibaba/Tencent HK edge can be added.
-- **Email:** deliverability to QQ/163/126 inboxes matters. Candidates include Alibaba Cloud DirectMail (HK/SG regions), AWS SES (ap-east-1 Hong Kong), and Postmark. SPF, DKIM, and DMARC must be configured. Send a small test to each major Chinese provider before launch.
-- **Continuous testing:** a synthetic probe from a mainland vantage point (a cheap mainland cloud VM, or a teacher's machine at school) checks page load and WebSocket RTT daily and alerts on regressions.
-- **Regulatory note (not legal advice):** online games offered *to the public in mainland China* have licensing and minor-protection requirements. A free, non-commercial school game hosted outside the mainland is lower-profile, but it still carries a risk that the owner should consider with the school (Risk R5).
-
-### 13.10 Observability
-- **Server metrics:** tick duration (p50/p99), rooms, players, bandwidth, reconciliation corrections, catch/block rewind usage. These go to Prometheus + Grafana, or a lightweight hosted alternative that is reachable from China.
-- **Client telemetry** (anonymous, aggregated): fps, frame time p95, RTT, packet loss, and the device GPU string (bucketed). It drives graphics defaults and the Chromebook budget.
-- **Error tracking:** self-hosted GlitchTip, with source maps.
-- **Uptime:** an external ping that alerts the owner by email or push.
-
-### 13.11 Testing strategy
 | Level | What | Tooling |
 |---|---|---|
-| Unit | Rules (hit, catch windows, centerline, scoring), filter normalisation, ledger math | Vitest |
-| Simulation | Headless bot-vs-bot matches (1,000 rounds per night): no crashes, no stuck balls, win rates balanced across sides, no NaNs | Vitest + `packages/sim` |
-| Netcode | Simulated latency, jitter, and loss (50/150/250 ms, 0–5% loss). Checks catch-favouring bounds, reconciliation error, and bandwidth budgets. | Custom harness |
-| Load | 500 headless bot clients against a staging server, measuring tick time and CPU | `tools/load-test` |
-| Browser smoke | Load the page, play a practice round, join by code | Playwright (CI, Chromium) |
-| Performance | Automated frame-time capture on a reference scene, with regressions failing CI above +10%. Manual checks on real Chromebooks before each release. | Playwright + a perf scene |
-| Playtests | Scheduled sessions with students (§15.3) | Survey + telemetry |
+| Unit | Rules, catch windows, centerline, scoring, filter normalisation, ledger | Vitest |
+| Simulation | Headless bot-vs-bot matches in CI: no crashes, no stuck balls, balanced sides | Vitest + `src/sim` (`npm run sim`, as in Tome) |
+| Netcode | Simulated 50/150/250 ms latency, jitter, and loss. Reconciliation error, catch fairness, bandwidth. | Custom harness |
+| Room | `GameRoom` tests with real WebSocket clients against `wrangler dev`, following Flashstone's `MatchRoom.test.ts` | Vitest |
+| Load | 16 headless bot clients per room × N rooms against a preview deploy | `tools/load-test` |
+| Browser smoke | Load, practice round, join by code | Playwright |
 
-### 13.12 Environments and deployment
-- **Local:** `pnpm dev` runs client, server, API, Postgres (Docker), and LiveKit (optional).
-- **Staging:** a small VPS that updates on every merge to `main`. It's for internal and playtest use.
-- **Production:** deployed by tag. The server sends a "restart in N minutes" broadcast, drains rooms (new matches go to the new version), and switches over. A client-version handshake forces a refresh when the protocol changes.
-- **Cost estimate** ◆ (monthly, USD):
-  - game + API VPS in HK (4 vCPU / 8 GB): $40–80
-  - LiveKit VPS: $30–60
-  - backups and object storage: $5
-  - email: $0–15
-  - domain: about $1
-  - **Total: about $80–160/month** at school scale
+### 13.13 Environments and deployment
+- **Local:**
+  - `npm run dev` for the client (Vite)
+  - `npm run dev:api` for `wrangler dev --local`, which includes D1 and the DOs
+  - `npm run db:migrate` for migrations
+  - These are the same scripts Tome uses.
+- **Preview:** `wrangler versions upload` gives a preview URL for playtests.
+- **Production:** `npm run deploy` (build + `wrangler deploy`).
+  - Before deploying, the admin panel broadcasts "update in 5 minutes".
+  - Rooms on the old version finish their match. The client version handshake then prompts a refresh.
+- **Secrets:** `RESEND_API_KEY`, `RESEND_FROM`, `TICKET_SECRET`, and the Realtime app ID/token, set with `wrangler secret put`. They're never committed.
 
 ---
 
@@ -826,7 +891,7 @@ Design rules for content-safe accounts (per spec, "accounts must not be affected
 ### 14.1 Principle
 New arenas, uniforms, and balls are **additive data plus assets**, deployed without schema changes and without touching accounts. Free materials go out only through explicit admin grants (per spec).
 
-### 14.2 Content definitions (`packages/content`)
+### 14.2 Content definitions (`src/content`)
 ```ts
 // Illustrative — balls are data + a small set of coded behaviours
 export const speedBall: BallDef = {
@@ -872,17 +937,18 @@ export const speedBall: BallDef = {
 
 #### Phase 0: Foundations and Spikes (Weeks 1–2)
 **Goal:** remove the largest technical unknowns before committing.
-- Answer the Priority-A open questions (§17).
-- Set up the monorepo, lint/format/typecheck, CI, and a staging VPS in HK.
-- **Spike 1:** a Rapier ragdoll plus 16 capsules and 12 balls in Three.js on a real low-end Chromebook. Measure fps.
-- **Spike 2:** WebSocket RTT and jitter from school (and from mainland China) to the HK VPS.
-- **Spike 3:** a minimal predicted-movement plus server-ball-throw prototype at 150 ms of simulated latency.
+- Answer the remaining Priority-A open questions (§17).
+- Scaffold the repo in the Tome of Secrets layout (§13.4): Vite, TS, ESLint, Vitest, `wrangler.jsonc` with static assets, a D1 database, the boundary check, CI, and `CLAUDE.md`. Deploy a hello-world to `duoshan.contrapaul.com`.
+- **Spike S1, performance:** Three.js scene plus Rapier ragdolls (6 active), 16 characters, and 12 balls on an **M1 MacBook Air in Safari and Chrome**, and on one older floor device. Measure fps and battery drain.
+- **Spike S2, latency (the most important):** an echo `GameRoom` Durable Object with `locationHint: apac`. Measure WebSocket RTT and jitter from the Shenzhen school, from Shenzhen homes, and from overseas, over a school week at different times of day. Apply the §13.11 decision rule.
+- **Spike S3, referee loop:** a 60 Hz `setInterval` sim in a DO with 16 fake clients. Measure tick stability, CPU per tick, and billed requests. Also test whether Rapier's WASM build loads in a DO (the escape hatch in §13.2).
+- **Spike S4, netcode feel:** predicted movement plus a DO-authoritative ball throw at 150 ms of simulated latency.
 
-**Exit criteria:** 60 fps is achievable on the reference Chromebook, RTT from school is ≤ 80 ms p50, and the stack is confirmed.
+**Exit criteria:** 60 fps on the M1 Air, a Local Host decision from the §13.11 table, a stable DO tick (p99 < 4 ms of CPU), and cost per room-hour confirmed.
 
 #### Phase 1: "Feel" Prototype, offline (Weeks 3–7)
 **Goal:** the core verbs are fun in single player against bots.
-- `packages/sim`: movement (run, sprint, crouch, slide, jump), stamina, trips.
+- `src/sim` (custom physics: capsules, spheres, boxes, ramps): movement (run, sprint, crouch, slide, jump), stamina, trips.
 - Standard ball: pickup, throw (quick and aimed), catch, block, live/dead states, hit rules, centerline rule.
 - Ragdoll knockouts, team outlines, and the first- and third-person camera.
 - Greybox Classic Gym.
@@ -894,12 +960,13 @@ export const speedBall: BallDef = {
 
 #### Phase 2: Networked Core (Weeks 8–12)
 **Goal:** low-latency online play that feels fair.
-- The game server with rooms, a fixed tick, and snapshots with delta compression.
+- The `GameRoom` Durable Object (the referee) and the `Directory` DO, with a fixed tick and snapshots with delta compression. Join tickets follow Flashstone's pattern.
 - Client prediction and reconciliation, entity interpolation, forward-predicted balls, and catch/block lag compensation.
 - Room codes, share URLs, Quick Play, bot fill to 6, join-in-progress, and reconnect.
 - The load-test harness and netcode test harness, plus a capacity measurement.
 
-**Exit criteria:** an 8v8 playtest (with bots filling in) at school feels fair, and there are no "I caught it on my screen" complaints above a small threshold. The server tick p99 stays under 8 ms per room.
+**Exit criteria:** an 8v8 playtest (with bots filling in) at school feels fair, and there are no "I caught it on my screen" complaints above a small threshold. DO tick CPU p99 stays under 4 ms per room.
+- **If spike S2 said so:** Local Host mode (WebRTC peer-to-peer with the same sim) is built in this phase.
 
 #### Phase 3: Classic Complete → **ALPHA** (Weeks 13–16)
 **Goal:** a complete Classic match loop, playable by students.
@@ -908,15 +975,15 @@ export const speedBall: BallDef = {
 - **Speed and Heavy balls** with their full effects.
 - The Classic FPV mode, the settings menu (sensitivity, FOV, keybinds, graphics presets, audio), and the quick-chat wheel.
 - A first art pass on Classic Gym and the character rig with the basic uniform and skin tones.
-- Performance pass 1 on Chromebooks.
+- Performance pass 1 (M1 Air on battery, plus the floor device on Low).
 
 **🚩 ALPHA RELEASE (~end of January 2027):** guests only, quick-chat only, Classic and Classic FPV in the Gym, shared with a limited group of students by URL.
 
 #### Phase 4: Accounts, Chat, and Moderation (Weeks 17–21)
 **Goal:** safe social features.
-- The API with sign-up (CoC + data use screens), email verification, login, reset, and sessions.
+- **Port auth from Tome of Secrets verbatim** (`worker/lib/*`, the four shared tables). Add the DuoShan screens: sign-up with the CoC and data-use steps, login, reset, and sessions. This is mostly a port, so it's quicker than a greenfield build.
 - Text chat with channels, rate limits, the filter, NOPE replacement, and incident transcripts.
-- The admin dashboard: accounts, rename, warn, mute, ban, the incident queue, reports, the word list, and the audit log with 2FA.
+- The admin dashboard: accounts, rename, warn, mute, ban, the incident queue, reports, the word list, and the audit log (role-gated `/admin`).
 - Dodgecoins ledger, profile, starter bonus uniform, and guest-to-account coin carry-over.
 - Privacy policy and CoC published (final wording by the owner).
 
@@ -931,7 +998,7 @@ export const speedBall: BallDef = {
 
 #### Phase 6: Social and Live-Ops Features (Weeks 28–32)
 - The walkable pre-match lobby with team pads, a mirror, and host controls.
-- Proximity voice via LiveKit, with PTT, mutes, reports, revoke, kill switch, and schedule.
+- A voice spike first (Cloudflare Realtime SFU vs peer-to-peer, tested from Shenzhen). Then proximity voice with PTT, mutes, reports, revoke, kill switch, and schedule.
 - The shop and loadout, uniform authoring template and validator, and the first owner-made uniforms.
 - The banner/campaign system in the menu, loading screen, lobby, and arenas.
 - Admin tools for content (grant items, schedule campaigns, events).
@@ -939,7 +1006,7 @@ export const speedBall: BallDef = {
 #### Phase 7: Polish, Audio, and Launch → **1.0** (Weeks 33–37)
 - **The owner's recorded audio** goes in (per spec, before going properly live), plus the final mix.
 - Performance pass 2, accessibility pass, and tutorial/onboarding (a 60-second interactive "Coach" tutorial).
-- Security review, backup and restore drill, load test at 3× expected peak, and China reachability verification.
+- Security review, a D1 Time Travel restore drill, a load test at 3× expected peak (cost checked too), and latency verification from Shenzhen and overseas.
 - Links are placed around the owner's domain, with a launch announcement at school.
 
 **🚩 1.0 LAUNCH (~mid-June 2027, before the summer break), or at the start of the next school year if the owner prefers a September launch.**
@@ -973,15 +1040,16 @@ These dates assume part-time owner availability and include normal school holida
 | Day-7 return rate | 25% | 35% |
 | Guest → account conversion | — | 40% |
 | Median time from page open to first throw | < 15 s | < 10 s |
-| p95 frame time on reference Chromebook | < 20 ms | < 16.7 ms |
-| Median RTT from school | < 80 ms | < 60 ms |
+| p95 frame time on M1 MacBook Air | < 16.7 ms | < 16.7 ms (on battery) |
+| Median RTT from Shenzhen to its room (or Local Host) | < 150 ms | < 100 ms |
+| Hosting cost | — | < $25/month at school scale |
 | "Would you recommend it to a friend?" (playtest survey, 0–10) | 7 | 8.5 |
 | Moderation incidents resolved within 48 h | — | 95% |
 
 ### 15.5 Definition of Done (every feature)
-- Implemented in `sim` (if it's gameplay) with unit tests. Headless bot matches stay green.
+- Implemented in `src/sim` (if it's gameplay) with unit tests. Headless bot matches stay green.
 - It works in online and practice modes.
-- It's in the performance budget on the reference Chromebook.
+- It's in the performance budget on the M1 MacBook Air.
 - Placeholder or final audio and visual feedback exist, so no silent actions.
 - Relevant settings and keybinds are exposed. Admin tooling exists if the feature creates moderation or content needs.
 - Docs are updated (player-facing help and/or the owner runbook).
@@ -992,21 +1060,22 @@ These dates assume part-time owner availability and include normal school holida
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| R1 | **Netcode feels unfair**, especially catches and blocks at school latency | High | Critical | Forward-predicted balls, defender-favoured bounded rewind, the Phase 2 harness, early playtests. The server is in HK, close to players. |
-| R2 | **Chromebooks can't hold 60 fps** with physics and ragdolls | Medium | High | Phase 0 spike on real hardware, cosmetic client ragdolls with a cap on active ragdolls (e.g. 6), Low preset, dynamic resolution, and a perf regression test in CI |
-| R3 | **School network blocks the game** (web filter, WebSocket, WebRTC) | Medium | High | Everything on 443/TLS, TURN over TLS, and ask school IT to allow-list the domain early. Voice is optional. |
-| R4 | **Children's privacy law and school policy** (COPPA/PIPL/GDPR-K, school IT policy) around accounts, email, and voice | Medium | High | Collect minimal data, voice off by default, no voice recording. **Confirm with school leadership before Phase 4.** Consider school-email-only sign-up or a teacher-issued code. |
-| R5 | **China reachability or regulation**: GFW interference, blocked dependencies, game licensing rules | Medium | High | HK hosting with CN2, no Google or third-party dependencies, a daily mainland probe, a low profile (non-commercial, school-focused). Get advice if the game grows beyond the school. |
-| R6 | **Voice chat abuse** can't be filtered | Medium | High | Accounts only, opt-in, PTT, mutes, reports, revoke, a kill switch and schedule. Voice ships last (Phase 6), and it can be cut if too risky. |
-| R7 | **Ragdoll comedy undermines readability or fairness** | Medium | Medium | Knockouts are rules-based. Ragdolls are cosmetic. Trips use a server capsule. Heavy-ball trips are tuned in playtests. |
-| R8 | **Scope creep** (4 arenas, 3 modes, voice, lobby, shop, banners) | High | Medium | Phase gates, the alpha comes first with a minimal feature set, and optional features (walkable lobby, voice) are explicitly cuttable for 1.0. |
-| R9 | **Owner time constraints** (teaching load) block art, audio, and moderation | High | Medium | Placeholder-first pipeline, validator tools, recruit 1–2 staff moderators, and incident queue triage in under 10 min/day |
-| R10 | **Word-filter evasion or false positives** | High | Low–Med | Normalisation, allow-list, live-editable lists, human review of incidents, reports |
-| R11 | **Server costs or a traffic spike** if the game spreads beyond school | Low | Medium | Capacity measured in Phase 2, horizontal scaling via the room directory, and a cap on concurrent rooms with a friendly "servers full" message |
-| R12 | **Cheating** (aim scripts, input macros) | Low | Medium | Server authority, input validation, reports, bans |
-| R13 | **Balance of third person vs first person** (peeking) | Medium | Low | Server-side eye-origin visibility, and Classic FPV as a separate mode |
-| R14 | **Physics non-determinism** causes visible prediction corrections | Medium | Low | Rapier deterministic build, smoothing, and authoritative correction. Correctness never depends on determinism. |
-| R15 | **Email deliverability to Chinese mailboxes** | Medium | Medium | Choose a provider with HK/SG sending, SPF/DKIM/DMARC, test sends in Phase 4, and a support contact for manual verification |
+| R1 | **Latency from Shenzhen to Cloudflare is high or unstable.** Standard Cloudflare plans don't serve from the mainland and can route via distant PoPs. | **High** | Critical | Phase 0 spike S2 with a decision rule (§13.11), netcode built for 100–180 ms, and the **Local Host mode** fallback for in-school play |
+| R2 | **Netcode feels unfair**, especially catches and blocks | High | Critical | Forward-predicted balls, defender-favoured bounded rewind, the Phase 2 harness, and early playtests from Shenzhen |
+| R3 | **Custom gameplay physics is too limited** (inflatables, ramps, edge cases) | Medium | Medium | Keep the physics needs narrow by design. Rapier-in-DO is the tested escape hatch (spike S3), and headless bot matches catch stuck or tunnelling balls. |
+| R4 | **Durable Object limits or tick jitter** (single thread, timer precision, eviction) | Medium | High | Spike S3 measures it. Keep the sim cheap. Clients tolerate jitter through interpolation, and reconnect-to-seat exists (the Flashstone pattern). |
+| R5 | **WebRTC voice unreachable or poor from mainland China** | Medium | Medium | Voice ships last and is optional. Spike Cloudflare Realtime vs peer-to-peer with TURN. It can be cut from 1.0. |
+| R6 | **Voice chat abuse** can't be filtered | Medium | High | Accounts only, opt-in, PTT, mutes, reports, revoke, a kill switch and schedule, and no recording |
+| R7 | **Ragdoll comedy undermines readability or fairness** | Medium | Medium | Knockouts are rules-based. Ragdolls are cosmetic. Trips use a referee capsule. Heavy-ball trips are tuned in playtests. |
+| R8 | **Scope creep** (4 arenas, 3 modes, voice, lobby, shop, banners) | High | Medium | Phase gates and an early alpha. Optional features (walkable lobby, voice) are explicitly cuttable for 1.0. |
+| R9 | **Owner time constraints** (teaching load) block art, audio, and moderation | High | Medium | Placeholder-first pipeline, validator tools, optional staff moderators, and incident queue triage in under 10 min/day |
+| R10 | **Word-filter evasion or false positives** | High | Low–Med | Normalisation, allow-list, live-editable lists, human review, reports |
+| R11 | **Cost spike** if the game spreads widely (billed DO duration and messages) | Low | Medium | 30 Hz input batching, rooms sleep when empty, a per-room idle timeout, a cap on concurrent rooms, and Cloudflare usage alerts |
+| R12 | **Cheating** (aim scripts, macros, malicious Local Host) | Low | Medium | Referee authority, input validation, reports, bans, and capped coin payouts from Local Host matches |
+| R13 | **Balance of third person vs first person** (peeking) | Medium | Low | Eye-origin visibility for throws, and Classic FPV as a separate mode |
+| R14 | **Safari/WebGL quirks on macOS** (pointer lock, audio unlock, WASM performance) | Medium | Medium | Safari is a first-class test target in every phase, and Playwright WebKit smoke tests run in CI |
+| R15 | **Email deliverability to Chinese mailboxes** (QQ, 163) through Resend | Medium | Medium | SPF/DKIM/DMARC on `contrapaul.com` and test sends in Phase 4. Unverified accounts can still play and earn. |
+| R16 | **Regulatory exposure in mainland China** for an online game | Low | Medium | Free, non-commercial, school-community scope with no payments. Get advice if it grows well beyond the school. |
 
 ---
 
@@ -1014,16 +1083,25 @@ These dates assume part-time owner availability and include normal school holida
 
 Priority **A** = needed before or during Phase 0. **B** = needed before the phase that builds the feature. **C** = can wait.
 
+### 17.0 Answered (v0.2)
+| ID | Question | Owner's answer → plan change |
+|---|---|---|
+| Q-T1 | Stack? | TypeScript + Three.js: yes. **No dedicated game servers.** Accounts as in Flashstone, make/bloodbowl, and Tome of Secrets. → Serverless Cloudflare stack (§13) |
+| Q-T2 | Where are players? | Worldwide. The school is in **Shenzhen**. → DO `locationHint` by region, and the Shenzhen latency spike (§13.11) |
+| Q-T3 | Domain? | `contrapaul.com`, reachable on the school network and in mainland China. → proposed `duoshan.contrapaul.com` |
+| Q-T5 | Devices? | Mostly **MacBook Air M1+**. → §3.2 |
+| Q-T6 | School IT? | Out of scope. → removed from the plan |
+| Q-S1 | Ages and approval? | Middle and high school. Leadership has approved, and it's not an official school project. → §10.6 |
+| — | "Does Rapier need a simulation?" | Rapier is a library and doesn't need a server. The referee runs in a Durable Object. See §13.2. |
+
 ### 17.1 Technology
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
-| Q-T1 | A | Are you comfortable with the proposed stack (TypeScript, Three.js, Rapier, Node, PostgreSQL, LiveKit)? Do you have preferences or existing experience (e.g. Unity/Godot web export, Babylon.js)? | Stack in §13.1 |
-| Q-T2 | A | **Where are most players physically?** Mainland China (which city?), elsewhere, or mixed? This decides the server region. | Hong Kong |
-| Q-T3 | A | What is the domain, and who controls its DNS? Will the game live at a subdomain (e.g. `play.<domain>`)? | `play.<domain>`, `admin.<domain>` |
-| Q-T4 | A | What is the hosting budget per month? Is there a preferred cloud (Alibaba, Tencent, AWS, other)? | ~$80–160/mo, HK VPS |
-| Q-T5 | A | Can you get **a representative low-end school device** (model?) for performance testing? Are school devices managed Chromebooks, Windows laptops, or personal (BYOD)? | Chromebook reference |
-| Q-T6 | A | Does the school network use a web filter or firewall that might block WebSockets/WebRTC? Who is the IT contact? | Allow-list request in Phase 0 |
-| Q-T7 | B | Should the game be playable **during school hours on school devices**, or is it an after-school/home game? This affects the voice schedule and IT involvement. | Both, with admin schedule toggles |
+| Q-T9 | A | Is **`duoshan.contrapaul.com`** the right address? | Yes |
+| Q-T10 | A | Is the **Workers Paid plan (~$5/month)** on your Cloudflare account OK? Durable Object rooms will outgrow the free tier. Expected total is roughly $5–15/month at school scale (§13.10). | Yes |
+| Q-T11 | A | Can you (or a colleague) run the **latency test page** from school and home in Shenzhen during Phase 0? It's one click and reports the numbers. | Yes |
+| Q-T12 | B | If Shenzhen latency is poor, is **Local Host mode** (one student's browser referees, and classmates connect peer-to-peer) acceptable for in-school play? | Yes, as a fallback |
+| Q-T13 | B | Should the game be playable during school hours, or is it after-school/home only? This affects the voice schedule defaults. | Both, with admin schedule toggles |
 | Q-T8 | C | Is mobile/tablet (touch) support ever desired? | Out of scope for 1.0 |
 
 ### 17.2 Gameplay rules
@@ -1042,9 +1120,8 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 ### 17.3 Social, safety, and school policy
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
-| Q-S1 | A | **What ages are the students**, and in which country or countries do they live? Has school leadership approved student accounts, email collection, and voice chat? | Confirm before Phase 4 |
 | Q-S2 | B | Should sign-up be **restricted to school email domains**, open to anyone, or open with a school "verified" badge? | Open, with an optional school badge |
-| Q-S3 | B | Will other staff act as **moderators**? | Yes, 1–2 staff |
+| Q-S3 | B | Will other staff act as **moderators**, or only you? | Only you at first. The role exists for later. |
 | Q-S4 | B | Should voice chat be **proximity only**, or also team radio? Should knocked-out players talk to each other? | Proximity + team radio. KO'd players talk to KO'd teammates. |
 | Q-S5 | B | Should guests be allowed a **custom name** (filtered), or only generated names? | Generated names only |
 | Q-S6 | B | Is the **guest-to-account coin carry-over** OK? | Yes, current session only |
@@ -1104,28 +1181,29 @@ Each epic becomes a GitHub milestone/label. Stories are sized S (< 1 day of agen
 
 | Epic | Key stories | Phase |
 |---|---|---|
-| E01 Repo & CI | monorepo scaffold (S), lint/typecheck/test CI (S), staging deploy (M), Docker compose (S) | 0 |
+| E01 Repo & CI | Tome-style scaffold + wrangler.jsonc (S), D1 create + 0001 migration (S), boundary check (S), CI (S), custom domain deploy (S) | 0 |
 | E02 Sim core | fixed-step loop (S), Rapier world wrapper (M), player controller (L→split), stamina (S), trips (M) | 1 |
 | E03 Ball mechanics | pickup (S), throw + spread (M), live/dead states (S), hit rules (M), catch (M), block (M), centerline (S) | 1 |
 | E04 Rendering | Three.js scene & camera (M), outlines (M), ball trails/tints (S), ragdoll render (M), LOD & perf presets (M) | 1–3 |
 | E05 Bots | input-driven bot shell (S), utility AI (L→split), difficulty (S), fill rules (S) | 1–2 |
 | E06 Netcode | protocol & bitpacking (M), snapshots + delta (M), prediction/reconciliation (L), interpolation (M), ball forward-prediction (M), lag-comp catches (M), harness (M) | 2 |
-| E07 Rooms & matchmaking | room lifecycle (M), codes/URLs (S), quick play (M), join-in-progress (S), reconnect (M) | 2 |
+| E07 Rooms & matchmaking | GameRoom DO + tickets (M), Directory DO + locationHint (M), room lifecycle (M), codes/URLs (S), quick play (M), join-in-progress (S), reconnect (M) | 2 |
 | E08 Classic mode | rounds (M), revive queue (M), spectate (M), anti-stall (M), match end (S) | 3 |
 | E09 Scoring & HUD | score events (M), kill feed (S), scoreboard (M), end screens (M), quick-chat wheel (S) | 3 |
 | E10 Speed/Heavy balls | speed effects (M), heavy effects + reactions (M), heavy trip (S) | 3 |
 | E11 Settings & onboarding | settings menu (M), keybinds (M), tutorial (M) | 3, 7 |
-| E12 Accounts | sign-up flow + CoC (M), email verify/reset (M), sessions (S), profile (S), delete account (S) | 4 |
+| E12 Accounts | port Tome auth lib + routes (M), sign-up flow + CoC (M), email verify/reset via Resend (S), sessions (S), profile (S), delete account (S) | 4 |
 | E13 Chat & filter | chat channels (M), filter normalisation (M), NOPE + incidents (M), rate limits (S), mute/report (M) | 4 |
 | E14 Admin dashboard | auth + 2FA (M), accounts view + actions (L), incident queue (M), reports (M), word list (S), audit log (S), live view (M) | 4 |
 | E15 Economy | coin ledger (M), earnings calc (S), guest carry-over (S), shop (M), loadout (M), grants (S) | 4, 6 |
 | E16 Arenas | export tool (M), Hypergym dynamic line (L), Neighborhood inflatables (L), City Block (M) | 5 |
 | E17 Ultimate | FFA rules (M), respawn system (S), Last Stand (S) | 5 |
 | E18 Social lobby | lobby map (M), team pads (S), host controls (M), mirror (S) | 6 |
-| E19 Voice | LiveKit deploy (M), token service (S), proximity subscribe + spatial audio (M), controls & safety (M) | 6 |
+| E19 Voice | China reachability spike (S), Cloudflare Realtime sessions or P2P signalling (M), proximity subscribe + spatial audio (M), controls & safety (M) | 6 |
 | E20 Banners | slots in client (M), campaign admin (M), manifest delivery (S) | 6 |
 | E21 Audio | audio engine + mixer (M), placeholder set (S), owner recording integration (M) | 1, 7 |
-| E22 Ops | metrics (M), error tracking (S), backups (S), China probe (S), load test (M) | 2, 7 |
+| E22 Ops | DO metrics + telemetry endpoint (M), latency probe page (S), usage/cost alerts (S), load test (M) | 0, 2, 7 |
+| E23 Local Host mode (conditional) | host-side referee in Web Worker (M), WebRTC data channels + DO signalling (M), host migration or graceful end (M) | 2 |
 
 ### 18.3 Glossary
 - **Live ball:** a thrown ball that hasn't touched the environment yet. It can knock players out.
@@ -1136,9 +1214,12 @@ Each epic becomes a GitHub milestone/label. Stories are sized S (< 1 day of agen
 - **Bounce-out:** a knockout by a deflected live ball.
 - **Reconciliation:** the client corrects its predicted state to match the server's authoritative state.
 - **Forward prediction:** showing a ball where it is *now* on the server, not where it was when the last snapshot was sent.
-- **SFU:** Selective Forwarding Unit, a server that relays voice streams between players.
-- **ICP 备案:** China's website registration, required for hosting inside mainland China.
+- **SFU:** Selective Forwarding Unit, a server that relays voice streams between players. Cloudflare Realtime provides one without us running a server.
+- **Durable Object (DO):** a Cloudflare serverless object with its own memory and storage, created on demand. One `GameRoom` DO per match is the referee.
+- **Server (in this plan):** the `GameRoom` Durable Object running on Cloudflare, not a machine anyone rents or maintains.
+- **Referee:** the one authoritative copy of the simulation that decides hits, catches, and knockouts.
+- **Local Host mode:** a fallback where one player's browser is the referee and others connect peer-to-peer.
 
 ---
 
-*Next step:* the owner answers the Priority-A questions in §17. Phase 0 then begins with repository scaffolding and the three technical spikes.
+*Next step:* the owner answers the remaining Priority-A questions (§17.1). Phase 0 then begins with the Tome-style scaffold and spikes S1–S4, where S2 (Shenzhen latency) is the most important.
