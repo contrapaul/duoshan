@@ -35,7 +35,7 @@ Heavy ball: A blue ball that takes twice as long to throw and travels slower tha
 - **Player abilities and progression:**
 Players have a limited sprint, short jump, duck, and can sprint crouch to slide. Player characters have ragdoll physics, and this will be a core and hilarious discovery for players. Players colliding with each other can trip and fall, as well as if they sprint into a wall or over a ball. Players left click to pick up a ball, and can left click and hold to try and catch a ball in the air. Dodgeballs may be caught if the player clicks and holds at the right time while also aiming looking at the ball. Players can throw the ball by left clicking, which is a basic throw- and takes a moment to wind up and release. Players can hold left click for 1.2 seconds to reduce the spread, but not to a pinpoint. They may tap right mouse to block a ball, with the same timing/proximity as catching. Throws, blocks, and catches may occur during all movement states, but not when tripped and recovering. 
 
-Players earn points for assists, catches, blocks, knocking out other players, wins, and special knockouts- IE while sliding, while airborne, double-knockouts, first knockout, bounce-outs (if an opposing player is knocked out by a stray bounced/blocked ball)
+Players earn points for assists, dodges (thrown balls passing close to them) catches, blocks, knocking out other players, wins, and special knockouts- IE while sliding, while airborne, double-knockouts, first knockout, bounce-outs (if an opposing player is knocked out by a stray bounced/blocked ball)
 
 - **Match length and pacing:**
 Matches last for 10 minutes or until a team wins 4/7 rounds. An 'Ultimate' match is up to 10 minutes.
@@ -64,11 +64,13 @@ Modern school gym, high-tech gym space, outdoor court in a neighborhood, and a b
 - **Characters and customization:**
 Players who have not made an account spawn with a basic uniforms and random skin color. Players who have made accounts access 1 bonus uniform at first, and can use earned Dodgecoins to buy more as released. I will create all special uniforms. Free-for-all mode is played with the exact uniform as shown in menu. In classic modes players on your team will have a blue outline, and the other team have a bright red outline. 
 
+Players who log in can choose body type 1 or 2 (male or female), choose between a few hair styles, skin colors, and hair colors. Faces are pixelated, but offer a few choices for players, and they also change dynamically when blocking, throwing, catching, or being knocked out. 
+
 - **Arenas:**
 Classic gym with a centerline, Hypergym- featuring a more dynamic line with some obstacles and ramps- to run over and sneak behind. Neighborhood- an outdoor arena with a inflatable cover that can be pushed around or knocked out of bounds by heavy balls. (And used to knock players down if hiding behind them). Ultimate: A free-for-all space without impassable centerlines.
 
 - **Visual direction:**
-Design of characters is closely based on the appearance of characters in 'Teardown', like Minecraft, but with more accurate dimensions, joints, and hands. 
+Design of characters is closely based on the appearance of characters in 'Teardown', like Minecraft, but with more accurate dimensions, joints, and hands. Bright colors, limited geometry, 
 
 - **Audio direction:**
 Funny. We can use midi and placeholder sounds at first, but I will record balls in the gym and my own sound effects shortly after the game is playable, and before we go properly live. (Adding links to the game around my domain)
