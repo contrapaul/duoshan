@@ -1,7 +1,7 @@
 # Duǒshǎn 躲闪 — Elite Dodgeball
 ## Detailed Project Plan
 
-> **Status:** Draft v0.5, 2026-09-28. v0.5 adds the **Playtest 1 changes** (§4.8), which the next build implements. The Phase 0 tech demo is built (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
+> **Status:** Draft v0.6, 2026-09-28. v0.6 adds the **Playtest 2 changes** (§4.9), which the next build implements. v0.5 added the Playtest 1 changes (§4.8, built). The Phase 0 tech demo is built (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
 > Draft v0.2, 2026-09-26. Built from `plans.md`.
 > **v0.2 changes (owner answers):**
 > - The architecture is now serverless Cloudflare (Workers, D1, Durable Objects), matching the owner's other projects. There are no dedicated game servers.
@@ -119,7 +119,7 @@ All units are metres, seconds, and kilograms. Values marked ◆ are tuning start
 | Block stance | Right mouse (**hold**) | Requires a ball. Holds it out in front as a physical shield (§4.3.3). Trackpad: two-finger click and hold. |
 | Toggle 1st/3rd person | V | Disabled in Classic FPV |
 | Text chat | Enter (all) / Y (team) | Accounts only; guests see a sign-up prompt |
-| Scoreboard | Tab | |
+| Scoreboard | Tab (hold) | Players, teams and scores (§4.9) |
 | Menu | Esc | Also releases pointer lock |
 
 All keys are rebindable. The game uses Pointer Lock for mouse look and offers optional fullscreen, which enables Keyboard Lock where supported.
@@ -206,10 +206,10 @@ Every ball carries a **state** that the server tracks and the client shows visua
 3. A live ball that hits a player (knocking them out) **stays live** until it touches the environment. It can knock out a second player, which is a *double knockout*.
 4. A ball deflected by a **block** stays live. If it then knocks out an *opposing* player, that's a **bounce-out**.
 5. **Friendly fire:** live balls pass *through* teammates harmlessly, so teammates never block your throws. This was changed in the tech demo; physically bouncing off teammates felt like being blocked by your own side.
-6. **Headshots** count as knockouts **[DECISION]**. Many school rules disallow them. §17 has this as an open question.
+6. **Big oofs** (a live ball hitting the head) count as knockouts, and can trigger slow motion (§4.7).
 7. **Saves** (real-dodgeball rule: a teammate catches a ball that has just hit you, before it goes dead, and cancels your knockout) are **not in v1** **[DECISION]**. They're a candidate for a later update.
 
-**Knockout reaction:** per spec, a *standard* ball knockout triggers a ragdoll with **no impact reaction**. The character just goes limp. Speed balls add a modest impulse, and Heavy balls add a dramatic one (§4.5). A knocked-out player's ragdoll stays for 2 s and then fades. The player enters the spectator/waiting state (§5.1).
+**Knockout reaction:** per spec, a *standard* ball knockout triggers a ragdoll with **no impact reaction**. The character just goes limp. Speed balls add a modest impulse, and Heavy balls add a dramatic one (§4.5). A knocked-out player's ragdoll stays for 2 s and then fades. The knocked-out player sees the **kill camera** (§4.9), then enters the spectator/waiting state (§5.1).
 
 ### 4.5 Ball types
 
@@ -256,7 +256,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 
 | Trigger | Chance | Duration ◆ |
 |---|---|---|
-| **Headshot knockout:** a live ball knocks a player out by touching the head zone (top ~0.3 m of the body) | **50%** | **8 s** |
+| **Big oof:** a live ball knocks a player out by hitting the head (top ~0.3 m of the body) | **50%** | **8 s** |
 | **Target hit:** a target appears **every 90 s of play**, and someone hits it with a thrown ball | 100% | **12 s** |
 | **Setup toggle "Full slow motion"** | — | The **entire match** |
 
@@ -269,7 +269,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
   - The 90 s timer counts match play time and carries across rounds. If the target is still up when a round ends, it disappears.
 - **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, possession clock, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
 - **Stacking:** a trigger during slow motion extends it, up to whichever end is later. In a **Full slow motion** match, the random triggers are off, since the match is already slow **[DECISION]**.
-- **Presentation:** audio pitch and tempo drop, a slight desaturation and vignette, a "SLOW-MO" banner with a countdown, and a whoosh on entry and exit.
+- **Presentation:** audio pitch and tempo drop, a light desaturation (colour stays at **80%** saturation, per Playtest 2) and a vignette, a "SLOW-MO" banner with a countdown, and a whoosh on entry and exit.
 - **Bots** see the same slowed world, so their reactions stay fair.
 
 ### 4.8 Playtest 1 changes (owner feedback, 2026-09-28)
@@ -283,7 +283,48 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 | P5 | First-person arms and hands. Proper voxel hands on all characters, with open (catch), grip (carry/shield) and relaxed poses. | §4.6, §11.2 | ✅ Built, awaiting playtest |
 | P6 | Physics-based blocking: hold RMB for a shield stance, and thrown balls bounce off the held ball | §4.3.3 | ✅ Built, awaiting playtest |
 | P7 | Balls keep their colour on the ground. Thrown (live) balls get a glowing outline. | §4.4 | ✅ Built, awaiting playtest |
-| P8 | Slow motion: 50% on a headshot KO (8 s), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | ✅ Built, awaiting playtest |
+| P8 | Slow motion: 50% on a Big oof KO (8 s), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | ✅ Built, awaiting playtest |
+
+### 4.9 Playtest 2 changes (owner feedback, 2026-09-28)
+
+| # | Change | Status |
+|---|---|---|
+| Q1 | **"Headshot" is now "Big oof"** everywhere: rules, HUD, feed, code. The mechanic is unchanged. | Planned |
+| Q2 | **"Whiff" is now "Dodge":** the on-screen word when a catch attempt misses | Planned |
+| Q3 | **Tab scoreboard** (hold Tab) | Planned |
+| Q4 | **Knockout feed**, top right, fading in and out: `Player [icon] Player` | Planned |
+| Q5 | **Icons** for thrown-ball knockouts, Big oofs, and catches | Planned |
+| Q6 | **Slow motion desaturation reduced:** colour stays at 80% saturation (was 50%) | Planned |
+| Q7 | **Kill camera:** a few seconds of third person, locked on your own character, when you're knocked out | Planned |
+
+**Tab scoreboard (Q3).** Hold **Tab** to show a centred panel. It replaces the "Scoreboard" placeholder in §4.1.
+- Header: round score (Blue x : y Red) and round number.
+- One column per team, listing every player in the match. Bots are tagged `[BOT]`, and you're highlighted.
+- Each row: name, status (**In**, **Out · #n in the return queue**, **Returning**, or **Tripped**), knockouts, catches, blocks, in-match score (§6.1), and Dodgecoins earned this match.
+- Rows are sorted by score. Knocked-out players are dimmed.
+- Mute and report buttons belong here later (§9.3), once chat and accounts exist.
+
+**Knockout feed (Q4, Q5).** It replaces the current text feed in the top-right corner.
+- Each entry reads **`Thrower [icon] Knocked-out player`**. Names are in team colours: blue for your team, red for the opponents.
+- Entries fade in, stay about 5 s, then fade out. At most 5 are shown, newest at the bottom.
+- Icons:
+
+| Event | Icon |
+|---|---|
+| Thrown-ball knockout | A ball, drawn in the thrown ball's colour (red, orange or blue) |
+| **Big oof** | The ball icon plus a small "impact star on a head" badge |
+| **Catch** | Two hands closing on a ball. Reads `Catcher [catch icon] Thrower`, because the thrower is the one out. |
+| Crossed the centerline | A line icon and just the player's name |
+| Bounce-out / double | Small tags after the entry (`BOUNCE-OUT`, `DOUBLE`) |
+| Target hit | The target icon and `+100` |
+
+- Trips, "a target appeared" and similar notices leave the feed. They move to the centre banner or the status line, so the feed stays about knockouts **[DECISION]**.
+- Icons are small inline SVGs, so they stay crisp and need no image downloads.
+
+**Kill camera (Q7).**
+- When you're knocked out, the camera switches to **third person** (even if you were in first person), **locked to your own character**, for **3 s** ◆. You watch your ragdoll fly.
+- It then moves to the normal spectator view (§5.1, §9.4). If you were in first person, first person comes back when you return to play.
+- The kill camera never shows the thrower's position, so it doesn't reveal extra information. It's purely comedy.
 
 ---
 
@@ -297,7 +338,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 - **Round start:** balls sit on the centerline (count scales with player count, §18.1). Players spawn at their back line. There's a 3-2-1 countdown, then "Dodge!" and players rush for the balls. A ball on the centerline can be picked up from either side, but the player's root must stay on their own side.
 - **Round win:** every player on the other team is knocked out.
 - **Revive on catch:** when a player catches a ball, the **earliest-knocked-out** teammate returns (first out, first in) **[DECISION]**. The returning player spawns at their team's back line after 1.0 s with 1.0 s of spawn protection. Spawn protection breaks early if they pick up or throw a ball.
-- **Knocked-out players:** they spectate (free camera over their team's half, or follow-cam on a teammate) and see their position in the return queue. They keep text chat.
+- **Knocked-out players:** after the kill camera (§4.9), they spectate (free camera over their team's half, or follow-cam on a teammate) and see their position in the return queue. They keep text chat.
 - **Anti-stall:**
   - **Possession clock:** a held ball starts pulsing after 8 s and **goes dead in the holder's hand at 10 s**, dropping at their feet. The pulsing warns the holder first.
   - **Round overtime:** after 2:30 in a round, the court's back boundaries slowly move inward. In Classic Gym this is shown as the out-of-bounds lines advancing, which squeezes players toward the centerline. In Hypergym it happens through the dynamic line system.
@@ -355,7 +396,7 @@ Identical to Classic, except that the camera is locked to first person. It gets 
 | Last One Standing clutch | +150 | You're the last player on your team and you win the round *(proposed)* |
 | Centerline KO | 0 | An opponent crossing the line gets no credit, except an assist to whoever tripped or pushed them across |
 
-A kill feed shows these events with icons, and the round/match summary shows a highlight tally.
+The **knockout feed** (§4.9) shows these events with icons, **Tab** shows the full scoreboard (§4.9), and the round/match summary shows a highlight tally.
 
 ### 6.2 Dodgecoins
 
@@ -1017,7 +1058,7 @@ export const speedBall: BallDef = {
 
 **Tuning notes from building it:**
 - Bots need the ballistic aim solver (`aimAt`). Straight-line aim misses badly at 10 m+.
-- Catching is timing-sensitive, as intended. A press about 0.2 s before arrival catches, and one pressed on release whiffs (both covered by tests).
+- Catching is timing-sensitive, as intended. A press about 0.2 s before arrival catches, and one pressed on release misses (both covered by tests).
 
 #### Phase 1: "Feel" Prototype, offline (Weeks 3–7)
 **Goal:** the core verbs are fun in single player against bots.
@@ -1029,7 +1070,8 @@ export const speedBall: BallDef = {
 - A minimal HUD (held ball, stamina, catch-window feedback) and placeholder audio.
 - Practice mode in a Web Worker.
 
-- **Playtest 1 changes P1–P8** (§4.8): the next build.
+- **Playtest 1 changes P1–P8** (§4.8): built.
+- **Playtest 2 changes Q1–Q7** (§4.9): the next build.
 
 **Exit criteria:** 5+ students play it and ask to play again. The catch/block feel is tuned. There's a gameplay video of the owner's favourite moments.
 
@@ -1182,7 +1224,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 ### 17.2 Gameplay rules
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
-| Q-G1 | ✅ | Headshots count as knockouts. Implied by Playtest 1: a headshot KO can trigger slow motion. | — |
+| Q-G1 | ✅ | Big oofs (head hits) count as knockouts, and can trigger slow motion. | — |
 | Q-G2 | B | Does a ball that hits one player **stay live** and knock out a second (double KO)? Do **deflected (blocked)** balls stay live (bounce-outs)? | Yes to both |
 | Q-G3 | B | Should the real-dodgeball **"save"** rule exist (a teammate catches a ball that just hit you)? | Not in v1 |
 | Q-G4 | B | Max balls held at once: 1 or 2? | 1 |
@@ -1191,7 +1233,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Q-G7 | B | Are you happy with the possession clock (10 s) and round overtime (shrinking court) as anti-stall rules? | Yes |
 | Q-G8 | B | Match timeout tiebreak: is sudden death OK? | Yes |
 | Q-G9 | C | Which revive order: first-out-first-in, or the catcher chooses? | First out, first in |
-| Q-G10 | ✅ | Headshot slow motion: **8 s** (target: 12 s). | — |
+| Q-G10 | ✅ | Big oof slow motion: **8 s** (target: 12 s). | — |
 | Q-G11 | ✅ | Block stance: walk speed, no sprint, no stamina drain. | — |
 | Q-G12 | ✅ | Heavy vs shield: bounces off weightily, shoves the blocker back, and knocks the shield ball out of their hands. | — |
 | Q-G13 | ✅ | Glow colour = the ball's own colour. | — |
@@ -1257,7 +1299,10 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Inflatable respawn | 30 s |
 | **Slow motion** | |
 | Time scale / ease | 0.4× / 0.3 s |
-| Headshot trigger | 50% chance, 8 s |
+| Big oof trigger | 50% chance, 8 s |
+| Slow motion colour | 80% saturation, plus vignette |
+| Kill camera | 3 s, third person, locked on your own character |
+| Knockout feed | each entry fades in 0.2 s, holds 5 s, fades out 0.6 s; max 5 entries |
 | Target | every 90 s of play, up 15 s, 12 s of slow motion on hit, +100 Dodgecoins to the thrower |
 
 ### 18.2 Epic backlog (for issue tracking)
