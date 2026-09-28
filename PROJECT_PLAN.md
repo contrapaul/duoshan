@@ -290,7 +290,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 | # | Change | Status |
 |---|---|---|
 | Q1 | **"Headshot" is now "Big oof"** everywhere: rules, HUD, feed, code. The mechanic is unchanged. | ✅ Built, awaiting playtest |
-| Q2 | **"Whiff" is now "Dodge":** the on-screen word when a catch attempt misses | ✅ Built, awaiting playtest |
+| Q2 | **"Dodge"** appears only when a live opposing ball passes within 0.6 m of your body and misses you. A missed catch attempt or a stray E press shows nothing (owner correction). | ✅ Built, awaiting playtest |
 | Q3 | **Tab scoreboard** (hold Tab) | ✅ Built, awaiting playtest |
 | Q4 | **Knockout feed**, top right, fading in and out: `Player [icon] Player` | ✅ Built, awaiting playtest |
 | Q5 | **Icons** for thrown-ball knockouts, Big oofs, and catches | ✅ Built, awaiting playtest |

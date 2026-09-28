@@ -54,6 +54,8 @@ export const HANDLING = {
   possessionWarn: 8,
   possessionMax: 10,
   inheritVelocity: 0.5,
+  /** A live ball passing within this many metres of a player's body without hitting them is a "Dodge". */
+  dodgeMargin: 0.6,
 };
 
 export type BallType = 'standard' | 'speed' | 'heavy';

@@ -63,7 +63,8 @@ export class Hud {
         this.feed.push({ text: `${name(e.player)} ${ICON.target} <i>+${e.coins}</i>`, t: 0 });
         if (e.player === this.local) this.showFlash(`+${e.coins} Dodgecoins`);
       }
-      if (e.t === 'catch_whiff' && e.player === this.local) this.showFlash('Dodge');
+      // "Dodge" only when a live ball passes close and misses you (§4.9), never for a missed catch.
+      if (e.t === 'dodge' && e.player === this.local) this.showFlash('Dodge');
       if (e.t === 'revive' && e.player === this.local) this.showFlash('BACK IN!');
       if (e.t === 'possession_drop' && e.player === this.local) this.showFlash('Too slow! Ball dropped');
       if (e.t === 'round_start') this.showBanner('DODGE!', 1.2);

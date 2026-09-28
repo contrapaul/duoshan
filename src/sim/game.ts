@@ -104,7 +104,7 @@ export function resetRound(state: GameState): void {
   state.balls = state.ballTypes.map((type, i) => ({
     id: i, type,
     pos: v3(0, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
-    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [],
+    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [],
   }));
   state.firstKoThisRound = false;
   state.outCounter = 0;
@@ -571,6 +571,8 @@ function throwBall(state: GameState, p: Player, ball: Ball, charge: number): voi
   ball.thrower = p.id;
   ball.throwerTeam = p.team;
   ball.hits = [];
+  ball.near = [];
+  ball.dodged = [];
   ball.deflectedBy = -1;
   ball.flags = [...(p.slideT > 0 ? ['slide'] : []), ...(!p.onGround ? ['airborne'] : [])];
   p.held = -1;
@@ -784,6 +786,7 @@ function collideBallPlayers(state: GameState, ball: Ball): void {
     if (live && p.team === ball.throwerTeam) continue;
     if (live && ball.hits.includes(p.id)) continue;
     const { point, d } = capsuleContact(p, ball.pos);
+    if (live) trackNearMiss(state, ball, p, d - def.radius - PLAYER.radius);
     if (d >= def.radius + PLAYER.radius) continue;
     const n = norm(sub(ball.pos, point));
     const relVel = sub(ball.vel, p.vel);
@@ -829,6 +832,24 @@ function collideBallPlayers(state: GameState, ball: Ball): void {
         trip(state, p, 'heavy', v3(d.x * 4, 1, d.z * 4));
       }
     }
+  }
+}
+
+/**
+ * "Dodge" (§4.9): a live ball came within dodgeMargin of a player's body and is
+ * now moving away without having hit them.
+ */
+function trackNearMiss(state: GameState, ball: Ball, p: Player, gap: number): void {
+  if (p.life !== 'active' || ball.dodged.includes(p.id)) return;
+  const near = ball.near.find((n) => n.id === p.id);
+  if (!near) {
+    if (gap < HANDLING.dodgeMargin) ball.near.push({ id: p.id, d: gap });
+    return;
+  }
+  if (gap < near.d) { near.d = gap; return; }
+  if (gap > near.d + 0.05) {
+    ball.dodged.push(p.id);
+    state.events.push({ t: 'dodge', player: p.id, ball: ball.id });
   }
 }
 

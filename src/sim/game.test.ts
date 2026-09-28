@@ -374,3 +374,53 @@ describe('scoring', () => {
     expect(cb.score).toBe(150 + 100); // catch + round win
   });
 });
+
+describe('dodge', () => {
+  function setup(): { s: GameState; a: GameState['players'][0]; b: GameState['players'][0] } {
+    const s = createGame({ seed: 9, teamSize: 1 });
+    live(s);
+    const [a, b] = s.players as [GameState['players'][0], GameState['players'][0]];
+    a.pos = v3(-5, 0, 0); b.pos = v3(5, 0, 0); b.yaw = Math.PI;
+    const ball = s.balls[0]!;
+    ball.state = 'held'; ball.holder = a.id; a.held = ball.id;
+    return { s, a, b };
+  }
+
+  it('a live ball passing close without hitting is a Dodge', () => {
+    const { s, a, b } = setup();
+    const { yaw, pitch } = aimAt(a, b, 18, 1);
+    const events: SimEvent[] = [];
+    for (let t = 0; t < 150; t++) {
+      const inputs = idle(s);
+      // Aim just wide of b: about 0.75 m to the side at 10 m.
+      inputs[0] = { ...NO_INPUT, yaw: yaw + 0.075, pitch, primary: t < 72 };
+      events.push(...step(s, inputs));
+    }
+    expect(b.life).toBe('active');
+    expect(events.filter((e) => e.t === 'dodge' && e.player === b.id)).toHaveLength(1);
+  });
+
+  it('pressing E (or clicking) with nothing to catch is not a Dodge', () => {
+    const { s } = setup();
+    const events: SimEvent[] = [];
+    for (let t = 0; t < 60; t++) {
+      const inputs = idle(s);
+      inputs[1] = { ...NO_INPUT, yaw: Math.PI, use: t % 20 < 2, primary: t % 30 < 2 };
+      events.push(...step(s, inputs));
+    }
+    expect(events.some((e) => e.t === 'dodge')).toBe(false);
+  });
+
+  it('a hit is not a Dodge', () => {
+    const { s, a, b } = setup();
+    const { yaw, pitch } = aimAt(a, b, 18, 1);
+    const events: SimEvent[] = [];
+    for (let t = 0; t < 150; t++) {
+      const inputs = idle(s);
+      inputs[0] = { ...NO_INPUT, yaw, pitch, primary: t < 72 };
+      events.push(...step(s, inputs));
+    }
+    expect(b.life).toBe('out');
+    expect(events.some((e) => e.t === 'dodge')).toBe(false);
+  });
+});

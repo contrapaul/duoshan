@@ -95,6 +95,9 @@ export interface Ball {
   deflectedBy: number; // blocker id if deflected while live, else -1
   /** Thrower's movement at release ('slide', 'airborne'), for special KOs. */
   flags: string[];
+  /** Near misses in progress: closest distance so far to each nearby opponent, and who has already dodged it. */
+  near: { id: number; d: number }[];
+  dodged: number[];
 }
 
 export type SimEvent =
@@ -113,6 +116,7 @@ export type SimEvent =
   | { t: 'revive'; player: number }
   | { t: 'bounce'; ball: number; speed: number; surface: 'floor' | 'wall' | 'player' }
   | { t: 'catch_whiff'; player: number }
+  | { t: 'dodge'; player: number; ball: number }
   | { t: 'possession_drop'; player: number; ball: number }
   | { t: 'round_start'; round: number }
   | { t: 'round_end'; winner: Team; score: [number, number] }
