@@ -35,7 +35,14 @@ export class Hud {
         this.feed.push({ text: `${name(e.player)} CAUGHT it!`, t: 6 });
         if (e.player === this.local) this.showFlash('CATCH!');
       }
-      if (e.t === 'block' && e.player === this.local) this.showFlash('BLOCK!');
+      if (e.t === 'block' && e.player === this.local) this.showFlash(e.broke ? 'HEAVY BALL! Shield knocked away' : 'BLOCK!');
+      if (e.t === 'block' && e.broke && e.player !== this.local) this.feed.push({ text: `${name(e.player)} blocked a heavy ball and lost their grip`, t: 4 });
+      if (e.t === 'slowmo') this.showBanner(e.cause === 'headshot' ? 'HEADSHOT · SLOW-MO' : 'TARGET HIT · SLOW-MO', 2);
+      if (e.t === 'target_spawn') { this.showBanner('TARGET!', 1.5); this.feed.push({ text: 'A target appeared above the centerline: hit it for slow motion', t: 6 }); }
+      if (e.t === 'target_hit') {
+        this.feed.push({ text: `${name(e.player)} hit the target <i>+${e.coins} DODGECOINS</i>`, t: 6 });
+        if (e.player === this.local) this.showFlash(`+${e.coins} Dodgecoins`);
+      }
       if (e.t === 'catch_whiff' && e.player === this.local) this.showFlash('whiff');
       if (e.t === 'trip') {
         this.feed.push({ text: `${name(e.player)} tripped${e.cause === 'wall' ? ' into a wall' : e.cause === 'heavy' ? ' over a heavy ball' : ''}`, t: 4 });
@@ -86,7 +93,8 @@ export class Hud {
     $('stamina').style.width = `${(me.stamina / PLAYER.staminaMax) * 100}%`;
     const ball = me.held >= 0 ? state.balls[me.held] : undefined;
     const held = $('held');
-    held.textContent = ball ? `${ball.type.toUpperCase()} BALL${me.heldT > HANDLING.possessionWarn ? ' · THROW IT!' : ''}` : me.life === 'active' ? 'empty hands: click to catch' : '';
+    const shield = me.action.kind === 'block' ? ' · SHIELD UP' : '';
+    held.textContent = ball ? `${ball.type.toUpperCase()} BALL${shield}${me.heldT > HANDLING.possessionWarn ? ' · THROW IT!' : ''}` : me.life === 'active' ? 'empty hands: click or E to catch' : '';
     held.className = ball ? `ball-${ball.type}${me.heldT > HANDLING.possessionWarn ? ' warn' : ''}` : '';
     const ring = $('charge');
     if (me.action.kind === 'aim' && ball) {
@@ -101,5 +109,10 @@ export class Hud {
     $('crosshair').classList.toggle('catching', me.action.kind === 'catch');
     $('crosshair').classList.toggle('blocking', me.action.kind === 'block');
     $('perf').textContent = `${perf} · ${thirdPerson ? '3rd' : '1st'} person (V)`;
+    // Slow motion and target status.
+    const slow = state.fullSlow ? 'FULL SLOW MOTION' : state.slowT > 0 ? `SLOW-MO ${state.slowT.toFixed(1)}s` : '';
+    const target = state.target ? `🎯 TARGET above the centerline · ${Math.ceil(state.target.t)}s · +100 Dodgecoins` : '';
+    $('status').textContent = [slow, target].filter(Boolean).join('  ·  ');
+    $('coins').textContent = me.coins ? `${me.coins} Dodgecoins` : '';
   }
 }

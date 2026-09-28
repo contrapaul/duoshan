@@ -30,6 +30,10 @@
           <option value="standard">Standard only</option>
           <option value="chaos">Speed + Heavy chaos</option>
         </select></label>
+        <label>Slow motion <select id="opt-slowmo">
+          <option value="events">Events only (headshots, target)</option>
+          <option value="full">Full slow motion (whole match)</option>
+        </select></label>
         <label>Graphics <select id="opt-quality">
           <option value="high">High (shadows, antialias)</option>
           <option value="low">Low</option>
@@ -38,8 +42,9 @@
       </div>
       <button id="play">PLAY</button>
       <div class="controls">
-        <b>WASD</b> move · <b>Shift</b> sprint · <b>Space</b> jump · <b>C</b> crouch (sprint + C = slide)<br />
-        <b>Left click</b>: pick up / hold to catch / throw (hold up to 1.2 s to aim) · <b>Right click</b> or <b>E</b>: block (needs a ball)<br />
+        <b>WASD</b> move · <b>Shift</b> sprint · <b>Space</b> jump · <b>A/D + Space</b> sidestep dash · <b>C</b> crouch (sprint + C = slide)<br />
+        <b>Left click</b> or <b>E</b>: pick up / catch · <b>Left click</b> with a ball: throw (hold up to 1.2 s to aim)<br />
+        <b>Hold right click</b> with a ball: raise it as a shield<br />
         <b>V</b> first/third person · <b>H</b> help · <b>Esc</b> pause
       </div>
       <p class="links"><a href="/latency.html">Network latency test →</a></p>
@@ -58,6 +63,8 @@
 
   <div id="hud" class="hidden">
     <div id="score"></div>
+    <div id="status"></div>
+    <div id="coins"></div>
     <div id="alive"></div>
     <div id="banner"></div>
     <div id="flash"></div>
@@ -73,8 +80,9 @@
       <b>Rules</b><br />
       Hit an opponent with a <i>live</i> ball (not yet bounced) to knock them out.<br />
       Catch a live ball to knock out the thrower <i>and</i> bring back a teammate.<br />
-      Holding a ball lets you block; empty hands let you catch.<br />
-      Heavy (blue) balls can't be caught or blocked. Speed (orange) balls still trip after bouncing.<br />
+      Holding a ball lets you block (hold right click to raise it as a shield); empty hands let you catch (click or E).<br />
+      A target appears every 90 s: hit it for 12 s of slow motion and 100 Dodgecoins.<br />
+      Glowing balls are live. Heavy (blue) balls can't be caught, and they knock a shield out of your hands. Speed (orange) balls still trip after bouncing.<br />
       Cross the yellow centerline and you're out.
     </div>
   </div>

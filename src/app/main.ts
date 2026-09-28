@@ -17,7 +17,7 @@ import { LocalInput } from './input';
 const LOCAL = 0;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-interface Settings { teamSize: number; difficulty: Difficulty; quality: Quality; balls: string; sensitivity: number }
+interface Settings { teamSize: number; difficulty: Difficulty; quality: Quality; balls: string; slowmo: string; sensitivity: number }
 
 function readSettings(): Settings {
   let saved: Partial<Settings> = {};
@@ -29,6 +29,7 @@ function readSettings(): Settings {
     difficulty: get('opt-difficulty').value as Difficulty,
     quality: get('opt-quality').value as Quality,
     balls: get('opt-balls').value,
+    slowmo: get('opt-slowmo').value,
     sensitivity: Number(get('opt-sensitivity').value),
   };
 }
@@ -51,7 +52,7 @@ async function start(): Promise<void> {
   $('menu').classList.add('hidden');
   $('loading').classList.remove('hidden');
 
-  const state = createGame({ seed: (Date.now() & 0xffffff) | 1, teamSize: s.teamSize, humans: [LOCAL], ballTypes: ballMix(s.balls, s.teamSize * 2) });
+  const state = createGame({ seed: (Date.now() & 0xffffff) | 1, teamSize: s.teamSize, humans: [LOCAL], ballTypes: ballMix(s.balls, s.teamSize * 2), fullSlow: s.slowmo === 'full' });
   const brains = new Map<number, BotBrain>();
   for (const p of state.players) if (p.bot) brains.set(p.id, createBrain(p, s.difficulty, state.rng.s + p.id));
 
@@ -104,9 +105,9 @@ async function start(): Promise<void> {
         inputs[LOCAL] = input!.sample();
         const events = step(state, inputs);
         view.onEvents(state, events);
-        view.stepPhysics(DT, state);
+        view.stepPhysics(state.dt, state);
         hud.onEvents(state, events);
-        playEvents(events, LOCAL);
+        playEvents(events, LOCAL, state.timeScale);
         if (events.some((e) => e.t === 'revive' && e.player === LOCAL) || (state.phase === 'countdown' && lastPhase !== 'countdown')) {
           input!.yaw = state.players[LOCAL]!.yaw;
           input!.pitch = 0;
@@ -116,7 +117,9 @@ async function start(): Promise<void> {
       }
       simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
     }
-    view.render(state, prev, paused ? 1 : acc / DT, dt, { yaw: input!.yaw, pitch: input!.pitch });
+    // Animation clocks follow game time, so slow motion slows the characters too.
+    view.render(state, prev, paused ? 1 : acc / DT, dt * state.timeScale, { yaw: input!.yaw, pitch: input!.pitch });
+    document.body.classList.toggle('slowmo', state.timeScale < 0.95);
 
     perfT -= dt;
     if (perfT <= 0) {

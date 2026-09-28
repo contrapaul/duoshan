@@ -56,7 +56,8 @@ export class LocalInput {
       crouch: k('KeyC') || k('KeyQ'),
       jump: k('Space'),
       primary: this.buttons.has(0),
-      secondary: this.buttons.has(2) || k('KeyE'),
+      secondary: this.buttons.has(2),
+      use: k('KeyE'),
     };
   }
 }

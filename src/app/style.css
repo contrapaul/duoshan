@@ -51,3 +51,9 @@ button.secondary { background: #3a4456; color: var(--ink); }
 #stamina { height: 100%; background: #7cff7c; }
 #perf { position: absolute; bottom: 8px; left: 10px; font: 12px ui-monospace, monospace; opacity: 0.75; }
 #help { position: absolute; bottom: 70px; right: 16px; max-width: 360px; background: var(--panel); padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; text-shadow: none; }
+#status { position: absolute; bottom: 62px; width: 100%; text-align: center; font-size: 14px; font-weight: 700; color: var(--accent); }
+#coins { position: absolute; top: 64px; left: 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
+/* Slow motion: desaturate and vignette (§4.7). */
+canvas#game { transition: filter 0.3s; }
+body.slowmo canvas#game { filter: saturate(0.5) contrast(1.1); }
+body.slowmo #hud::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55)); }

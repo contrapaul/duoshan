@@ -30,10 +30,10 @@ const SPECS: PartSpec[] = [
   { name: 'head', parent: 'torso', pivot: [0, 0.52, 0], size: [0.26, 0.28, 0.24], offset: [0, 0.14, 0], color: 'skin' },
   { name: 'upperArmR', parent: 'torso', pivot: [0, 0.45, 0.27], size: [0.11, 0.3, 0.11], offset: [0, -0.15, 0], color: 'jersey' },
   { name: 'foreArmR', parent: 'upperArmR', pivot: [0, -0.3, 0], size: [0.1, 0.27, 0.1], offset: [0, -0.135, 0], color: 'skin' },
-  { name: 'handR', parent: 'foreArmR', pivot: [0, -0.27, 0], size: [0.1, 0.1, 0.08], offset: [0, -0.05, 0], color: 'skin' },
+  { name: 'handR', parent: 'foreArmR', pivot: [0, -0.27, 0], size: [0.09, 0.09, 0.04], offset: [0, -0.045, 0], color: 'skin' },
   { name: 'upperArmL', parent: 'torso', pivot: [0, 0.45, -0.27], size: [0.11, 0.3, 0.11], offset: [0, -0.15, 0], color: 'jersey' },
   { name: 'foreArmL', parent: 'upperArmL', pivot: [0, -0.3, 0], size: [0.1, 0.27, 0.1], offset: [0, -0.135, 0], color: 'skin' },
-  { name: 'handL', parent: 'foreArmL', pivot: [0, -0.27, 0], size: [0.1, 0.1, 0.08], offset: [0, -0.05, 0], color: 'skin' },
+  { name: 'handL', parent: 'foreArmL', pivot: [0, -0.27, 0], size: [0.09, 0.09, 0.04], offset: [0, -0.045, 0], color: 'skin' },
   { name: 'thighR', parent: 'pelvis', pivot: [0, -0.02, 0.1], size: [0.15, 0.44, 0.15], offset: [0, -0.22, 0], color: 'shorts' },
   { name: 'shinR', parent: 'thighR', pivot: [0, -0.44, 0], size: [0.13, 0.42, 0.13], offset: [0, -0.21, 0], color: 'skin' },
   { name: 'footR', parent: 'shinR', pivot: [0, -0.43, 0], size: [0.24, 0.08, 0.13], offset: [0.06, -0.02, 0], color: 'shoe' },
@@ -83,9 +83,54 @@ export interface Character {
   outlines: THREE.Mesh[];
   /** Original local transforms of the part meshes (restored after a ragdoll). */
   restore: Map<THREE.Mesh, { parent: THREE.Object3D; pos: THREE.Vector3; quat: THREE.Quaternion }>;
+  /** Finger and thumb hinges on each palm (children of the hand meshes, so ragdolls carry them). */
+  fingers: { R: THREE.Group; L: THREE.Group };
+  thumbs: { R: THREE.Group; L: THREE.Group };
+  colors: { skin: number; jersey: number };
   walkPhase: number;
   throwAnim: number;
   catchFlash: number;
+}
+
+export type HandPose = 'open' | 'grip' | 'relaxed';
+const CURL: Record<HandPose, number> = { open: 0, grip: 1.35, relaxed: 0.55 };
+
+/**
+ * Voxel fingers + thumb on a hanging palm (PROJECT_PLAN.md §11.2). The palm faces
+ * the body (−z for the right hand); fingers hinge at the palm's lower edge and
+ * curl toward the palm; the thumb sits on the palm's front edge.
+ */
+function addFingers(palm: THREE.Mesh, side: 1 | -1, skin: THREE.Material, outlineMat: THREE.Material, outlines: THREE.Mesh[]):
+  { fingers: THREE.Group; thumb: THREE.Group } {
+  const fingers = new THREE.Group();
+  fingers.position.set(0, -0.045, 0);
+  palm.add(fingers);
+  const f = new THREE.Mesh(geo([0.085, 0.08, 0.035]), skin);
+  f.position.set(0, -0.04, 0);
+  f.castShadow = true;
+  fingers.add(f);
+  const thumb = new THREE.Group();
+  thumb.position.set(0.045, 0.01, -side * 0.005);
+  palm.add(thumb);
+  const t = new THREE.Mesh(geo([0.03, 0.065, 0.03]), skin);
+  t.position.set(0, -0.03, 0);
+  t.castShadow = true;
+  thumb.add(t);
+  for (const m of [f, t]) {
+    const o = new THREE.Mesh(m.geometry, outlineMat);
+    o.scale.setScalar(1.15);
+    m.add(o);
+    outlines.push(o);
+  }
+  return { fingers, thumb };
+}
+
+function poseHand(c: Character, side: 'R' | 'L', hp: HandPose): void {
+  const s = side === 'R' ? 1 : -1;
+  // Curl toward the palm (−z for the right hand, +z for the left).
+  c.fingers[side].rotation.x = s * CURL[hp];
+  c.thumbs[side].rotation.z = hp === 'open' ? 0.7 : hp === 'grip' ? -0.2 : 0.2;
+  c.thumbs[side].rotation.x = hp === 'grip' ? s * 0.8 : 0;
 }
 
 export function createCharacter(seed: number, outlineColor: number): Character {
@@ -125,6 +170,8 @@ export function createCharacter(seed: number, outlineColor: number): Character {
     meshes[s.name] = mesh;
     restore.set(mesh, { parent: pivot, pos: mesh.position.clone(), quat: mesh.quaternion.clone() });
   }
+  const handR = addFingers(meshes.handR, 1, mat('skin'), outlineMat, outlines);
+  const handL = addFingers(meshes.handL, -1, mat('skin'), outlineMat, outlines);
   // Eyes.
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
   for (const z of [-0.055, 0.055]) {
@@ -132,7 +179,12 @@ export function createCharacter(seed: number, outlineColor: number): Character {
     eye.position.set(0.13, 0.03, z);
     meshes.head.add(eye);
   }
-  return { root, pivots, meshes, outlines, restore, walkPhase: 0, throwAnim: 0, catchFlash: 0 };
+  return {
+    root, pivots, meshes, outlines, restore,
+    fingers: { R: handR.fingers, L: handL.fingers }, thumbs: { R: handR.thumb, L: handL.thumb },
+    colors: { skin: colors.skin, jersey: colors.jersey },
+    walkPhase: 0, throwAnim: 0, catchFlash: 0,
+  };
 }
 
 export function setOutline(c: Character, color: number | null): void {
@@ -203,8 +255,13 @@ export function pose(c: Character, p: PoseInput): void {
     foreR = 0.2;
     lean -= 0.3 * Math.sin(t * Math.PI);
   }
-  if (p.action === 'catch') { armR = 1.45; armL = 1.45; foreR = 0.35; foreL = 0.35; }
-  if (p.action === 'block') { armR = 1.7; foreR = 0.1; armL = 1.2; foreL = 0.5; }
+  let inward = 0;
+  let handR: HandPose = p.holding ? 'grip' : 'relaxed';
+  let handL: HandPose = 'relaxed';
+  if (p.action === 'catch') { armR = 1.45; armL = 1.45; foreR = 0.35; foreL = 0.35; inward = 0.2; handR = 'open'; handL = 'open'; }
+  // Block stance: both hands hold the ball out in front of the chest as a shield.
+  if (p.action === 'block') { armR = 1.25; armL = 1.25; foreR = 0.35; foreL = 0.35; inward = 0.42; handR = 'grip'; handL = 'grip'; }
+  if (p.action === 'aim') handL = 'open';
   if (p.action === 'pickup') { lean = -0.9; armR = 1.0; foreR = 0.2; }
 
   P.pelvis.position.y = pelvisY;
@@ -214,6 +271,144 @@ export function pose(c: Character, p: PoseInput): void {
   P.shinR.rotation.z = shinR; P.shinL.rotation.z = shinL;
   P.upperArmR.rotation.z = armR; P.upperArmL.rotation.z = armL;
   P.foreArmR.rotation.z = foreR; P.foreArmL.rotation.z = foreL;
-  P.upperArmR.rotation.x = p.action === 'catch' ? -0.25 : 0;
-  P.upperArmL.rotation.x = p.action === 'catch' ? 0.25 : 0;
+  P.upperArmR.rotation.y = inward;
+  P.upperArmL.rotation.y = -inward;
+  poseHand(c, 'R', handR);
+  poseHand(c, 'L', handL);
+}
+
+// ---------------------------------------------------------------------------
+// First-person arms (PROJECT_PLAN.md §4.6): forearms + hands drawn in front of
+// the camera in every action pose, so you can see yourself catch and block.
+
+interface FpArm { group: THREE.Group; fingers: THREE.Group; thumb: THREE.Group }
+
+export interface FpArms {
+  root: THREE.Group;
+  R: FpArm;
+  L: FpArm;
+  /** Ball held in the first-person view. */
+  ball: THREE.Mesh;
+}
+
+/** One arm, wrist at the origin, fingers pointing −z, palm facing −y, forearm running back along +z. */
+function buildFpArm(side: 1 | -1, skin: THREE.Material, jersey: THREE.Material): FpArm {
+  const group = new THREE.Group();
+  const fore = new THREE.Mesh(geo([0.075, 0.075, 0.34]), skin);
+  fore.position.set(0, 0, 0.17);
+  const cuff = new THREE.Mesh(geo([0.095, 0.095, 0.1]), jersey);
+  cuff.position.set(0, 0, 0.36);
+  const palm = new THREE.Mesh(geo([0.095, 0.04, 0.1]), skin);
+  palm.position.set(0, 0, -0.05);
+  // Four separate fingers so the hand reads as a hand up close.
+  const fingers = new THREE.Group();
+  fingers.position.set(0, 0, -0.1);
+  for (let i = 0; i < 4; i++) {
+    const f = new THREE.Mesh(geo([0.019, 0.03, i === 0 || i === 3 ? 0.07 : 0.085]), skin);
+    f.position.set(-0.036 + i * 0.024, 0, i === 0 || i === 3 ? -0.035 : -0.0425);
+    fingers.add(f);
+  }
+  const thumb = new THREE.Group();
+  thumb.position.set(-side * 0.05, -0.01, -0.03);
+  const t = new THREE.Mesh(geo([0.035, 0.035, 0.07]), skin);
+  t.position.set(0, 0, -0.035);
+  thumb.add(t);
+  group.add(fore, cuff, palm, fingers, thumb);
+  return { group, fingers, thumb };
+}
+
+export function createFpArms(colors: { skin: number; jersey: number }): FpArms {
+  const skin = new THREE.MeshLambertMaterial({ color: colors.skin, map: voxelTexture() });
+  const jersey = new THREE.MeshLambertMaterial({ color: colors.jersey, map: voxelTexture() });
+  const root = new THREE.Group();
+  const R = buildFpArm(1, skin, jersey);
+  const L = buildFpArm(-1, skin, jersey);
+  root.add(R.group, L.group);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  root.add(ball);
+  return { root, R, L, ball };
+}
+
+interface ArmPose { pos: [number, number, number]; rot: [number, number, number]; curl: number }
+
+/** Right-arm keyframes in camera space; the left arm mirrors x, rot.y and rot.z. */
+const FP_POSES: Record<string, { R: ArmPose; L: ArmPose }> = {
+  idle: {
+    R: { pos: [0.3, -0.4, -0.4], rot: [-0.3, 0.15, -0.9], curl: 0.6 },
+    L: { pos: [0.3, -0.4, -0.4], rot: [-0.3, 0.15, -0.9], curl: 0.6 },
+  },
+  // Hand grips the ball from the right, so both stay visible.
+  carry: {
+    R: { pos: [0.44, -0.4, -0.6], rot: [0.2, 0.15, -Math.PI / 2], curl: 0.9 },
+    L: { pos: [0.3, -0.42, -0.4], rot: [-0.3, 0.15, -0.9], curl: 0.6 },
+  },
+  // Palms toward the ball, fingers up and slightly splayed: the unmistakable catch pose.
+  catch: {
+    R: { pos: [0.16, -0.2, -0.46], rot: [0.85, 0.25, 0.25], curl: 0.02 },
+    L: { pos: [0.16, -0.2, -0.46], rot: [0.85, 0.25, 0.25], curl: 0.02 },
+  },
+  block: {
+    R: { pos: [0.2, -0.26, -0.5], rot: [0.25, 0, -Math.PI / 2], curl: 0.8 },
+    L: { pos: [0.2, -0.26, -0.5], rot: [0.25, 0, -Math.PI / 2], curl: 0.8 },
+  },
+  aim: {
+    R: { pos: [0.5, 0.02, 0.12], rot: [0.6, 0.3, -Math.PI / 2], curl: 0.9 },
+    L: { pos: [0.2, -0.2, -0.5], rot: [0.5, 0.2, 0.2], curl: 0 },
+  },
+  throw: {
+    R: { pos: [0.08, -0.34, -0.62], rot: [-0.35, 0.25, -1.0], curl: 0.3 },
+    L: { pos: [0.3, -0.42, -0.4], rot: [-0.3, 0.15, -0.9], curl: 0.6 },
+  },
+};
+
+const tmpQ = new THREE.Quaternion();
+const tmpE = new THREE.Euler();
+
+export interface FpPoseInput {
+  pose: 'idle' | 'carry' | 'catch' | 'block' | 'aim' | 'throw';
+  /** Wind-up progress 0..1 while aiming (blends carry → drawn back). */
+  aim: number;
+  ballRadius: number;
+  ballColor: number;
+  showBall: boolean;
+  bob: number;
+  dt: number;
+}
+
+export function poseFpArms(a: FpArms, p: FpPoseInput): void {
+  const k = 1 - Math.exp(-22 * p.dt);
+  for (const side of ['R', 'L'] as const) {
+    const s = side === 'R' ? 1 : -1;
+    let target = FP_POSES[p.pose]![side];
+    if (p.pose === 'aim' && side === 'R') {
+      const from = FP_POSES.carry!.R;
+      const to = FP_POSES.aim!.R;
+      target = {
+        pos: from.pos.map((v, i) => v + (to.pos[i]! - v) * p.aim) as [number, number, number],
+        rot: from.rot.map((v, i) => v + (to.rot[i]! - v) * p.aim) as [number, number, number],
+        curl: to.curl,
+      };
+    }
+    const arm = a[side];
+    arm.group.position.lerp(new THREE.Vector3(s * target.pos[0], target.pos[1] + p.bob, target.pos[2]), k);
+    tmpQ.setFromEuler(tmpE.set(target.rot[0], s * target.rot[1], s * target.rot[2]));
+    arm.group.quaternion.slerp(tmpQ, k);
+    // Curl toward the palm (−y).
+    arm.fingers.rotation.x += (-target.curl - arm.fingers.rotation.x) * k;
+    arm.thumb.rotation.y += (s * (target.curl > 0.5 ? 0.3 : -0.5) - arm.thumb.rotation.y) * k;
+  }
+  // The ball: in the right palm while carrying or winding up, held out in both hands in block stance.
+  const ball = a.ball;
+  ball.visible = p.showBall;
+  if (!p.showBall) return;
+  ball.scale.setScalar(p.ballRadius);
+  (ball.material as THREE.MeshLambertMaterial).color.setHex(p.ballColor);
+  if (p.pose === 'block') {
+    ball.position.set(0, -0.26, -0.5);
+  } else {
+    // Against the palm (hand-local −y is the palm side).
+    const local = new THREE.Vector3(0, -(0.02 + p.ballRadius), -0.05);
+    a.R.group.updateMatrix();
+    ball.position.copy(local.applyMatrix4(a.R.group.matrix));
+  }
 }

@@ -52,7 +52,7 @@ const DT = 1 / 60;
 export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerInput {
   const skill = SKILL[brain.difficulty];
   const idle: PlayerInput = {
-    moveX: 0, moveZ: 0, yaw: brain.yaw, pitch: brain.pitch, sprint: false, crouch: false, jump: false, primary: false, secondary: false,
+    moveX: 0, moveZ: 0, yaw: brain.yaw, pitch: brain.pitch, sprint: false, crouch: false, jump: false, primary: false, secondary: false, use: false,
   };
   if (p.life !== 'active' || state.phase !== 'play') {
     brain.primary = false;
@@ -85,7 +85,8 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
     if (plan === 'catch' && p.held < 0) {
       if (tHit < 0.22) primary = true;
     } else if (plan === 'block' && p.held >= 0) {
-      if (tHit < 0.2) secondary = true;
+      // Raise the shield early and hold it until the ball arrives (§4.3.3).
+      if (tHit < 0.5) secondary = true;
     } else {
       // Dodge sideways, away from where the ball is heading.
       const bv = norm(v3(ball.vel.x, 0, ball.vel.z));
@@ -96,7 +97,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       sprint = true;
       const impactY = ball.pos.y + ball.vel.y * tHit - 0.5 * GRAVITY * BALLS[ball.type].gravityScale * tHit * tHit;
       if (impactY > p.pos.y + 1.1 && nextFloat(brain.rng) < 0.5) crouch = true;
-      else if (impactY < p.pos.y + 0.6) jump = true;
+      else if (tHit < 0.35) jump = true; // moving sideways, so Space is a sidestep dash
     }
   } else if (p.held >= 0) {
     // 2. Holding a ball: pick a target, move up, aim and throw.
@@ -170,7 +171,7 @@ function finish(
     yaw: brain.yaw,
     pitch: brain.pitch,
     sprint: sprint && dot(wish, f) > 0.3,
-    crouch, jump, primary, secondary,
+    crouch, jump, primary, secondary, use: false,
   };
 }
 
@@ -203,7 +204,7 @@ function findThreat(
       const skill = SKILL[brain.difficulty];
       const roll = nextFloat(brain.rng);
       const plan: Plan = p.held < 0 && def.catchable && roll < skill.catchP ? 'catch'
-        : p.held >= 0 && def.blockable && roll < skill.blockP ? 'block' : 'dodge';
+        : p.held >= 0 && !def.breaksShield && roll < skill.blockP ? 'block' : 'dodge';
       seen = { at: state.time, plan, throwTick: ball.thrower };
       brain.seen.set(ball.id, seen);
     }

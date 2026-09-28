@@ -17,12 +17,14 @@ export interface PlayerInput {
   jump: boolean;
   /** Left mouse: pick up / catch / throw. Held state; the sim detects edges. */
   primary: boolean;
-  /** Right mouse: block. */
+  /** Right mouse, held: block stance. */
   secondary: boolean;
+  /** E: pick up / catch (same as primary with empty hands). */
+  use: boolean;
 }
 
 export const NO_INPUT: PlayerInput = {
-  moveX: 0, moveZ: 0, yaw: 0, pitch: 0, sprint: false, crouch: false, jump: false, primary: false, secondary: false,
+  moveX: 0, moveZ: 0, yaw: 0, pitch: 0, sprint: false, crouch: false, jump: false, primary: false, secondary: false, use: false,
 };
 
 export type Life = 'active' | 'tripped' | 'out';
@@ -59,10 +61,16 @@ export interface Player {
   heldT: number; // possession clock
   action: Action;
   catchCooldown: number;
-  blockCooldown: number;
+  dashCooldown: number;
+  /** Forced movement (dash, shove): velocity eases out over forceDur. */
+  forceT: number;
+  forceDur: number;
+  forceVel: Vec3;
   prevPrimary: boolean;
-  prevSecondary: boolean;
+  prevUse: boolean;
   prevJump: boolean;
+  /** Dodgecoins earned this session (target hits). */
+  coins: number;
   // Stats (in-match score, §6.1).
   kos: number;
   catches: number;
@@ -91,8 +99,13 @@ export type SimEvent =
   | { t: 'throw'; player: number; ball: number; charge: number }
   | { t: 'pickup'; player: number; ball: number }
   | { t: 'catch'; player: number; ball: number; thrower: number }
-  | { t: 'block'; player: number; ball: number }
-  | { t: 'ko'; player: number; by: number; ball: number; cause: 'hit' | 'catch' | 'line' | 'heavy_block' | 'heavy_catch'; point: Vec3; impulse: Vec3; seed: number; special: string[] }
+  | { t: 'block'; player: number; ball: number; broke: boolean }
+  | { t: 'dash'; player: number }
+  | { t: 'slowmo'; cause: 'headshot' | 'target'; seconds: number }
+  | { t: 'target_spawn' }
+  | { t: 'target_hit'; player: number; coins: number }
+  | { t: 'target_gone' }
+  | { t: 'ko'; player: number; by: number; ball: number; cause: 'hit' | 'catch' | 'line' | 'heavy_catch'; point: Vec3; impulse: Vec3; seed: number; special: string[] }
   | { t: 'trip'; player: number; cause: 'wall' | 'collision' | 'heavy' | 'speedball'; impulse: Vec3; seed: number }
   | { t: 'getup'; player: number }
   | { t: 'revive'; player: number }
@@ -121,4 +134,14 @@ export interface GameState {
   events: SimEvent[];
   /** Ball type mix used on round reset. */
   ballTypes: BallType[];
+  /** Game seconds this tick (DT × timeScale). Slow motion scales everything in play. */
+  dt: number;
+  timeScale: number;
+  /** Real seconds of slow motion remaining. */
+  slowT: number;
+  /** "Full slow motion" setup toggle: the whole match is slow; random triggers are off. */
+  fullSlow: boolean;
+  /** Real seconds of play until the next target appears. */
+  targetTimer: number;
+  target: { pos: Vec3; vz: number; t: number } | null;
 }

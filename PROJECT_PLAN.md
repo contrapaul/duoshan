@@ -183,10 +183,10 @@ Throwing, catching, and blocking work in every movement state (run, sprint, crou
 - **The block is pure physics.** In block stance, the held ball is a solid sphere. Any thrown ball that **touches it bounces off** with normal sphere-to-sphere physics (both balls' size and restitution). There's no timing window or view cone: if it touches the shield, it's blocked. If it misses the shield and touches your body, you're hit.
 - A ball that is only **casually carried** (not in block stance) is **not a shield**. Thrown balls pass it and can hit you.
 - **Raising the shield** ◆ takes 0.10 s with Standard or Speed held, and 0.25 s with Heavy held (per spec). The shield is solid only once raised.
-- **In block stance:** movement is capped at walking speed (no sprint, slide, or dash), and you can't throw. Release RMB first. There's no time limit, so the cost is mobility **[DECISION]**.
+- **In block stance:** movement is capped at walking speed (no sprint, slide, or dash), and you can't throw. Release RMB first. There's no time limit and no stamina drain. The cost is mobility (owner-confirmed).
 - **Deflected balls stay live** (§4.4 rule 4), which makes bounce-outs possible.
 - **Speed ball** blocks are jarring: 0.3 s of camera shake and a small push back.
-- **Heavy ball vs shield** **[DECISION]:** physics still applies, but the heavy ball's mass wins. It **knocks the shield ball out of your hands** (dropped, dead) and continues with about 60% of its speed, still live. If it then touches your body, you're out. Blocking a heavy ball is possible only at a glancing angle.
+- **Heavy ball vs shield** (owner-confirmed): the heavy ball **bounces off, weightily**. It keeps most of its speed and changes direction less than a light ball would. It **knocks the blocker back** (a shove of about 1.5 m) and **knocks the shield ball out of their hands** (dropped, dead). The block still saves the blocker, so it's not a knockout, and the deflected heavy ball stays live.
 - **Holding a Heavy ball as your shield** gives a bigger shield that's slower to raise. A thrown Heavy ball hitting a held Heavy ball bounces off normally.
 
 ### 4.4 Ball states and hit rules
@@ -197,7 +197,7 @@ Every ball carries a **state** that the server tracks and the client shows visua
 |---|---|---|
 | **Resting / Dead** | Normal ball colour, no glow (Playtest 1: balls keep their colour on the ground) | On the ground or rolling. Harmless. Can be picked up. |
 | **Held** | Normal colour in hand | Being carried |
-| **Live** | Normal colour + **glowing outline** + subtle trail | Thrown, and has not yet touched the environment. **Glow = can knock you out.** Glow colour is team-relative **[DECISION]**: red glow for balls thrown by opponents (danger), blue for your team's. |
+| **Live** | Normal colour + **glowing outline** in the ball's own colour + subtle trail | Thrown, and has not yet touched the environment. **Glow = can knock you out.** |
 | **Dead-fast** (Speed only) | Normal colour + faint short trail, no glow | Has bounced off the environment but is still fast. Can trip or push but not knock out (§4.5). |
 
 **Hit rules (Classic)** **[DECISION — confirm]:**
@@ -222,7 +222,7 @@ Every ball carries a **state** that the server tracks and the client shows visua
 | Restitution (bounciness) | 0.60 | 0.70 | 0.15 ("barely bounces") |
 | Rolling friction | Medium | Low | High |
 | Catchable | Yes | Yes (jarring, smaller window) | **No** |
-| Blockable (physics shield, §4.3.3) | Yes | Yes (jarring) | Knocks the shield ball out of your hands |
+| Blockable (physics shield, §4.3.3) | Yes | Yes (jarring) | Bounces off weightily, shoves the blocker back, and knocks the shield ball out of their hands |
 | Knockout impulse to ragdoll | None (limp) | Small | Large: faceplant, spin, or flip depending on hit zone |
 | After-bounce effect | Harmless | While speed > 12 m/s: leg hit on a sprinting/jumping player causes a **trip**. Body hit on a stable player causes a **push** of about 0.5 m. Head hit causes a **knockdown** (trip, not KO). Below 12 m/s: harmless. | Harmless, but a resting heavy ball **trips** players who run, sprint, or slide over it |
 | Other | — | Aimed throws are faster and more accurate. Unaimed throws are less accurate. | Knocks Neighborhood inflatables around (§7.3) |
@@ -256,7 +256,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 
 | Trigger | Chance | Duration ◆ |
 |---|---|---|
-| **Headshot knockout:** a live ball knocks a player out by touching the head zone (top ~0.3 m of the body) | **50%** | **The rest of the current round** **[DECISION — confirm]**. This reads "full round slow motion" as covering the whole round, in contrast with the target's 12 s. |
+| **Headshot knockout:** a live ball knocks a player out by touching the head zone (top ~0.3 m of the body) | **50%** | **8 s** |
 | **Target hit:** a target appears **every 90 s of play**, and someone hits it with a thrown ball | 100% | **12 s** |
 | **Setup toggle "Full slow motion"** | — | The **entire match** |
 
@@ -265,7 +265,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
   - It's a glowing bullseye about 1 m across, hanging **above the centerline** at 4–6 m and drifting slowly side to side, so both teams have equal access.
   - It stays up for **15 s** or until hit, with a chime and a HUD arrow when it appears.
   - Any live ball can hit it, from either team. The ball goes dead and drops.
-  - The thrower gets **+100 points**.
+  - The thrower gets **+100 Dodgecoins** (the game's currency, §6.2). This has nothing to do with winning the match: no score points.
   - The 90 s timer counts match play time and carries across rounds. If the target is still up when a round ends, it disappears.
 - **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, possession clock, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
 - **Stacking:** a trigger during slow motion extends it, up to whichever end is later. In a **Full slow motion** match, the random triggers are off, since the match is already slow **[DECISION]**.
@@ -276,14 +276,14 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 
 | # | Change | Where specified | Status |
 |---|---|---|---|
-| P1 | Larger balls (Standard 0.30 m, Speed 0.27 m, Heavy 0.34 m) | §4.5 | Planned |
-| P2 | **E** picks up and catches, in addition to left click | §4.1, §4.3 | Planned |
-| P3 | **A/D + Space** sidestep dash | §4.1, §4.2 | Planned |
-| P4 | Heavy ball: longer wind-up (0.65 s), +50% range (13.5 m/s) | §4.3.1, §4.5 | Planned |
-| P5 | First-person arms and hands. Proper voxel hands on all characters, with open (catch), grip (carry/shield) and relaxed poses. | §4.6, §11.2 | Planned |
-| P6 | Physics-based blocking: hold RMB for a shield stance, and thrown balls bounce off the held ball | §4.3.3 | Planned |
-| P7 | Balls keep their colour on the ground. Thrown (live) balls get a glowing outline. | §4.4 | Planned |
-| P8 | Slow motion: 50% on a headshot KO (rest of round), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | Planned |
+| P1 | Larger balls (Standard 0.30 m, Speed 0.27 m, Heavy 0.34 m) | §4.5 | ✅ Built, awaiting playtest |
+| P2 | **E** picks up and catches, in addition to left click | §4.1, §4.3 | ✅ Built, awaiting playtest |
+| P3 | **A/D + Space** sidestep dash | §4.1, §4.2 | ✅ Built, awaiting playtest |
+| P4 | Heavy ball: longer wind-up (0.65 s), +50% range (13.5 m/s) | §4.3.1, §4.5 | ✅ Built, awaiting playtest |
+| P5 | First-person arms and hands. Proper voxel hands on all characters, with open (catch), grip (carry/shield) and relaxed poses. | §4.6, §11.2 | ✅ Built, awaiting playtest |
+| P6 | Physics-based blocking: hold RMB for a shield stance, and thrown balls bounce off the held ball | §4.3.3 | ✅ Built, awaiting playtest |
+| P7 | Balls keep their colour on the ground. Thrown (live) balls get a glowing outline. | §4.4 | ✅ Built, awaiting playtest |
+| P8 | Slow motion: 50% on a headshot KO (8 s), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | ✅ Built, awaiting playtest |
 
 ---
 
@@ -1191,12 +1191,12 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Q-G7 | B | Are you happy with the possession clock (10 s) and round overtime (shrinking court) as anti-stall rules? | Yes |
 | Q-G8 | B | Match timeout tiebreak: is sudden death OK? | Yes |
 | Q-G9 | C | Which revive order: first-out-first-in, or the catcher chooses? | First out, first in |
-| Q-G10 | A | Does **headshot** slow motion last the **rest of the round**, or a fixed time like the target's 12 s (say 4 s)? | Rest of the round |
-| Q-G11 | A | **Block stance:** is walking speed with no time limit the right cost? Or should the shield also drain stamina? | Walk speed, no time limit |
-| Q-G12 | A | **Heavy ball vs shield:** knock the shield ball out of the blocker's hands (heavy continues, still live), or simply bounce off like any other ball? | Knock it out of their hands |
-| Q-G13 | B | **Glow colour** on thrown balls: team-relative (red = opponents', blue = yours), or the ball's own colour? | Team-relative |
-| Q-G14 | B | **Target:** above the centerline, up 15 s, +100 points to the thrower. Anything different (position, visibility, reward)? | As in §4.7 |
-| Q-G15 | B | **Ball sizes** 0.30 / 0.27 / 0.34 m (Standard / Speed / Heavy): about right, or bigger still? | As proposed, tuned in the next playtest |
+| Q-G10 | ✅ | Headshot slow motion: **8 s** (target: 12 s). | — |
+| Q-G11 | ✅ | Block stance: walk speed, no sprint, no stamina drain. | — |
+| Q-G12 | ✅ | Heavy vs shield: bounces off weightily, shoves the blocker back, and knocks the shield ball out of their hands. | — |
+| Q-G13 | ✅ | Glow colour = the ball's own colour. | — |
+| Q-G14 | ✅ | Target reward: +100 **Dodgecoins** to the thrower, not score points. | — |
+| Q-G15 | ✅ | Ball sizes 0.30 / 0.27 / 0.34 m: try them, then retune after playtesting. | — |
 
 ### 17.3 Social, safety, and school policy
 | ID | Pri | Question | Proposed default |
@@ -1257,8 +1257,8 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Inflatable respawn | 30 s |
 | **Slow motion** | |
 | Time scale / ease | 0.4× / 0.3 s |
-| Headshot trigger | 50% chance, rest of round |
-| Target | every 90 s of play, up 15 s, 12 s of slow motion on hit, +100 points |
+| Headshot trigger | 50% chance, 8 s |
+| Target | every 90 s of play, up 15 s, 12 s of slow motion on hit, +100 Dodgecoins to the thrower |
 
 ### 18.2 Epic backlog (for issue tracking)
 
