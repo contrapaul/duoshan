@@ -1,7 +1,7 @@
 # Duǒshǎn 躲闪 — Elite Dodgeball
 ## Detailed Project Plan
 
-> **Status:** Draft v0.4, 2026-09-28. **Phase 0 tech demo built** (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
+> **Status:** Draft v0.5, 2026-09-28. v0.5 adds the **Playtest 1 changes** (§4.8), which the next build implements. The Phase 0 tech demo is built (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
 > Draft v0.2, 2026-09-26. Built from `plans.md`.
 > **v0.2 changes (owner answers):**
 > - The architecture is now serverless Cloudflare (Workers, D1, Durable Objects), matching the owner's other projects. There are no dedicated game servers.
@@ -110,11 +110,13 @@ All units are metres, seconds, and kilograms. Values marked ◆ are tuning start
 |---|---|---|
 | Move | W A S D | |
 | Sprint | Shift (hold) | Uses stamina |
-| Jump | Space | Short hop |
+| Jump | Space | Short hop (when A/D are not held) |
+| Sidestep dash | A or D + Space | Short sideways burst (§4.2). Replaces jumping while strafing. |
 | Crouch / duck | C (hold) | **Not Ctrl.** Ctrl+W closes the browser tab and can't be intercepted outside fullscreen Keyboard Lock. |
 | Slide | Crouch while sprinting | |
 | Pick up / Catch / Throw | Left mouse | Context-sensitive (§4.3) |
-| Block | Right mouse (tap) | Requires holding a ball |
+| Pick up / Catch | E | Same as left mouse with empty hands. Does nothing while holding a ball. |
+| Block stance | Right mouse (**hold**) | Requires a ball. Holds it out in front as a physical shield (§4.3.3). Trackpad: two-finger click and hold. |
 | Toggle 1st/3rd person | V | Disabled in Classic FPV |
 | Text chat | Enter (all) / Y (team) | Accounts only; guests see a sign-up prompt |
 | Scoreboard | Tab | |
@@ -131,6 +133,7 @@ All keys are rebindable. The game uses Pointer Lock for mouse look and offers op
 | Crouch walk | 2.2 m/s. Hitbox height drops to about 60%. |
 | Jump | About 0.6 m apex. No double jump. Air control 30%. |
 | Slide | Needs ≥ 80% sprint speed. Starts at 8.0 m/s, decays over 0.8 s. Hitbox is low. Cooldown 1.0 s. Costs 0.5 s of stamina. |
+| **Sidestep dash** | Space while holding A or D, on the ground. Moves **~2.5 m sideways over 0.2 s** (relative to the view), then returns to normal speed. Cooldown 0.8 s. Costs 0.4 s of stamina. Diagonals (W+D+Space) dash straight sideways **[DECISION]**. With too little stamina, Space does a normal jump. You can throw, catch, and block during a dash. Not available while sliding, crouching, or airborne. |
 | Tripped | Ragdoll for 1.2–2.0 s (depends on the cause), then a get-up animation of 0.6 s. The player cannot act during either. |
 
 **Trip triggers:**
@@ -143,30 +146,31 @@ All keys are rebindable. The game uses Pointer Lock for mouse look and offers op
 
 ### 4.3 Ball handling — the core verbs
 
-A player holds **at most one ball** **[DECISION]**. The left mouse button is context-sensitive:
+A player holds **at most one ball** **[DECISION]**. The left mouse button is context-sensitive. **E** does the same as left mouse whenever your hands are empty (pick up or catch):
 
 | Hands | Input | Result |
 |---|---|---|
-| Empty | Tap LMB, targeting a ball on the ground within 1.6 m | **Pick up** (0.15 s) |
-| Empty | Press and hold LMB with no ball in reach | **Catch stance** (§4.3.2) |
+| Empty | Tap LMB **or E**, targeting a ball on the ground within 1.6 m | **Pick up** (0.15 s) |
+| Empty | Press and hold LMB **or E** with no ball in reach | **Catch stance** (§4.3.2) |
 | Holding | Tap LMB | **Quick throw.** Wind-up, then release (§4.3.1). |
 | Holding | Hold LMB (up to 1.2 s), release | **Aimed throw.** Spread shrinks as the hold lengthens. |
-| Holding | Tap RMB | **Block** (§4.3.3) |
-| Empty | Tap RMB | Nothing, plus a "need a ball to block" hint the first few times |
+| Holding | **Hold** RMB | **Block stance**: the ball is held out in front as a physical shield (§4.3.3) |
+| Holding | E | Nothing |
+| Empty | RMB | Nothing, plus a "need a ball to block" hint the first few times |
 
 This produces the game's central trade-off: **holding a ball lets you block, empty hands let you catch.**
 
 Throwing, catching, and blocking work in every movement state (run, sprint, crouch, slide, jump). They do not work while tripped, recovering, or knocked out.
 
 #### 4.3.1 Throwing
-- **Wind-up** ◆: Standard 0.25 s, Speed 0.25 s, Heavy 0.50 s (twice as long, per spec). Other players can see the wind-up animation. That tell is part of the skill.
+- **Wind-up** ◆: Standard 0.25 s, Speed 0.25 s, Heavy **0.65 s** (longer than before, balancing its extra range per Playtest 1). Other players can see the wind-up animation. That tell is part of the skill.
 - **Aim charge:** holding LMB after the wind-up for up to 1.2 s shrinks the spread cone linearly from "quick" to "aimed" (it never reaches zero, per spec). Releasing before the wind-up finishes queues the throw at the end of the wind-up.
 - **Spread cone** (half-angle) ◆: Standard quick 4.0° → aimed 1.2°. Speed quick 6.0° → aimed 0.6° (plus up to +15% speed when aimed). Heavy quick 3.0° → aimed 1.5°.
 - **Inherited velocity:** the ball inherits 50% of the thrower's horizontal velocity. Sprint-throws are stronger but less controlled.
 - **Throw origin:** hand position. Aim comes from the camera ray, corrected so that third-person camera offset doesn't let players throw from behind cover they can't see around. The server raycasts from the character's eyes.
 
 #### 4.3.2 Catching
-- Pressing LMB with empty hands (and no pickup target) starts a **catch attempt**.
+- Pressing LMB **or E** with empty hands (and no pickup target) starts a **catch attempt**. Both arms and open hands go out in front, and other players see it clearly (§4.6, §11.2).
 - **Active window** ◆: 0.35 s from the press. If a **live** ball (§4.4) enters the *catch volume* during that window, the catch succeeds. The catch volume is a sphere of radius 0.7 m centred 0.5 m in front of the chest, and the ball must be within 35° of the view direction.
 - After the window ends, holding the button keeps a "brace" pose that does **not** catch.
 - **Failed attempt cooldown:** 0.5 s before another catch attempt. This stops players spamming the button.
@@ -174,13 +178,16 @@ Throwing, catching, and blocking work in every movement state (run, sprint, crou
 - **Heavy ball:** **cannot be caught.** A catch attempt against a live heavy ball counts as a hit, so the player is knocked out.
 - **Outcome of a catch (Classic):** the thrower is knocked out, the catcher keeps the ball, and one knocked-out teammate of the catcher returns (§5.1).
 
-#### 4.3.3 Blocking
-- Tap RMB while holding a ball. Its **active window** and proximity rules match catching: 0.35 s, a block volume in front of the held ball, and a 35° view cone.
-- **Block wind-up** ◆: 0.05 s with Standard or Speed held, 0.20 s with Heavy held (per spec, "takes longer to wind up").
-- A blocked ball deflects off the held ball with physical restitution. **Deflected balls stay live** (§4.4), which makes bounce-outs possible.
-- **Speed ball** blocks are jarring (the same reaction as catching).
-- **Heavy ball cannot be blocked.** A block against a live heavy ball knocks the blocker out, and the heavy ball keeps going.
-- Block cooldown after a whiffed block: 0.4 s.
+#### 4.3.3 Blocking (physics-based, per Playtest 1)
+- **Hold RMB** while holding a ball to enter **block stance**. The ball moves from the carry position to a **shield position** held out in both hands, about 0.45 m in front of the chest. Releasing RMB returns it to carry.
+- **The block is pure physics.** In block stance, the held ball is a solid sphere. Any thrown ball that **touches it bounces off** with normal sphere-to-sphere physics (both balls' size and restitution). There's no timing window or view cone: if it touches the shield, it's blocked. If it misses the shield and touches your body, you're hit.
+- A ball that is only **casually carried** (not in block stance) is **not a shield**. Thrown balls pass it and can hit you.
+- **Raising the shield** ◆ takes 0.10 s with Standard or Speed held, and 0.25 s with Heavy held (per spec). The shield is solid only once raised.
+- **In block stance:** movement is capped at walking speed (no sprint, slide, or dash), and you can't throw. Release RMB first. There's no time limit, so the cost is mobility **[DECISION]**.
+- **Deflected balls stay live** (§4.4 rule 4), which makes bounce-outs possible.
+- **Speed ball** blocks are jarring: 0.3 s of camera shake and a small push back.
+- **Heavy ball vs shield** **[DECISION]:** physics still applies, but the heavy ball's mass wins. It **knocks the shield ball out of your hands** (dropped, dead) and continues with about 60% of its speed, still live. If it then touches your body, you're out. Blocking a heavy ball is possible only at a glancing angle.
+- **Holding a Heavy ball as your shield** gives a bigger shield that's slower to raise. A thrown Heavy ball hitting a held Heavy ball bounces off normally.
 
 ### 4.4 Ball states and hit rules
 
@@ -188,10 +195,10 @@ Every ball carries a **state** that the server tracks and the client shows visua
 
 | State | Visual | Meaning |
 |---|---|---|
-| **Resting / Dead** | Light tint (light red / light orange / light blue) | On the ground or rolling. Harmless. Can be picked up. |
-| **Held** | Full colour in hand | Being carried |
-| **Live** | Full colour + subtle trail | Thrown, and has not yet touched the environment |
-| **Dead-fast** (Speed only) | Light orange + short trail | Has bounced off the environment but is still fast. Can trip or push but not knock out (§4.5). |
+| **Resting / Dead** | Normal ball colour, no glow (Playtest 1: balls keep their colour on the ground) | On the ground or rolling. Harmless. Can be picked up. |
+| **Held** | Normal colour in hand | Being carried |
+| **Live** | Normal colour + **glowing outline** + subtle trail | Thrown, and has not yet touched the environment. **Glow = can knock you out.** Glow colour is team-relative **[DECISION]**: red glow for balls thrown by opponents (danger), blue for your team's. |
+| **Dead-fast** (Speed only) | Normal colour + faint short trail, no glow | Has bounced off the environment but is still fast. Can trip or push but not knock out (§4.5). |
 
 **Hit rules (Classic)** **[DECISION — confirm]:**
 1. A **live** ball that touches an opposing player's body knocks that player out.
@@ -208,14 +215,14 @@ Every ball carries a **state** that the server tracks and the client shows visua
 
 | Property ◆ | Standard (red) | Speed (orange) | Heavy (blue) |
 |---|---|---|---|
-| Diameter | 0.21 m | 0.19 m | 0.24 m |
-| Throw speed (quick → aimed) | 18 m/s | 25 → 29 m/s | 11 m/s |
+| Diameter (Playtest 1: larger) ◆ | **0.30 m** (was 0.21) | **0.27 m** (was 0.19) | **0.34 m** (was 0.24) |
+| Throw speed (quick → aimed) | 18 m/s | 25 → 29 m/s | **13.5 m/s** (was 11) |
 | Gravity scale | 1.0 | 0.8 (flatter arc) | 1.6 (steep arc) |
-| Max effective range | ~Full court | Full court | ~60% of court |
+| Max effective range | ~Full court | Full court | **~11.5 m, +50%** (was ~7.7 m). Now reaches the opposing back half. |
 | Restitution (bounciness) | 0.60 | 0.70 | 0.15 ("barely bounces") |
 | Rolling friction | Medium | Low | High |
 | Catchable | Yes | Yes (jarring, smaller window) | **No** |
-| Blockable | Yes | Yes (jarring) | **No** |
+| Blockable (physics shield, §4.3.3) | Yes | Yes (jarring) | Knocks the shield ball out of your hands |
 | Knockout impulse to ragdoll | None (limp) | Small | Large: faceplant, spin, or flip depending on hit zone |
 | After-bounce effect | Harmless | While speed > 12 m/s: leg hit on a sprinting/jumping player causes a **trip**. Body hit on a stable player causes a **push** of about 0.5 m. Head hit causes a **knockdown** (trip, not KO). Below 12 m/s: harmless. | Harmless, but a resting heavy ball **trips** players who run, sprint, or slide over it |
 | Other | — | Aimed throws are faster and more accurate. Unaimed throws are less accurate. | Knocks Neighborhood inflatables around (§7.3) |
@@ -233,9 +240,50 @@ A per-hit random seed adds variety. The server sends the seed so every client sh
 
 - **Third person:** over-the-shoulder, with a swappable shoulder. The camera collides with world geometry so it cannot clip through walls.
 - **Anti-peek rule:** in third person, the **server** decides visibility and throw origin from the character's eyes. The camera can still see over cover, which is exactly why **Classic FPV** exists as a mode.
-- **First person:** the player sees their own arms and ball. The camera follows the head during slides and knockdowns, with a comfort option to reduce camera roll.
+- **First person:** the player sees **their own forearms and hands** (a first-person arms view drawn in front of the camera) in every action pose. Playtest 1 found this essential, because in the demo you couldn't see yourself trying to catch or block.
+  - **Idle / moving:** hands low at the edges of the screen, bobbing with movement.
+  - **Catch stance:** both arms thrust forward with palms open toward the crosshair. The unmistakable "I'm catching" pose.
+  - **Carrying:** the ball in the right hand, lower right.
+  - **Block stance:** the ball pushed out in both hands, lower centre, partly covering the view. It's a real shield, so it should feel like one.
+  - **Wind-up and throw:** the right arm draws back out of view while the left hand points at the target, then follows through.
+  - The camera follows the head during slides and knockdowns, with a comfort option to reduce camera roll.
 - **Team outlines:** in Classic, teammates get a blue outline and opponents a bright red one. Ultimate has no team outlines **[DECISION]**; opponents get a subtle neutral outline for readability.
 - **Accessibility:** outline colours can be changed. The defaults avoid relying only on red/green. Blue and red are distinguishable for most colour-vision deficiencies. An optional pattern or icon overhead marks the team.
+
+### 4.7 Slow motion (Playtest 1)
+
+Slow motion slows **the whole match for everyone at once**: movement, balls, timers, and animations. The referee applies it as a time scale on each simulation step, so it works identically online. The network tick rate doesn't change.
+
+| Trigger | Chance | Duration ◆ |
+|---|---|---|
+| **Headshot knockout:** a live ball knocks a player out by touching the head zone (top ~0.3 m of the body) | **50%** | **The rest of the current round** **[DECISION — confirm]**. This reads "full round slow motion" as covering the whole round, in contrast with the target's 12 s. |
+| **Target hit:** a target appears **every 90 s of play**, and someone hits it with a thrown ball | 100% | **12 s** |
+| **Setup toggle "Full slow motion"** | — | The **entire match** |
+
+- **Speed** ◆: 0.4× normal. It eases in and out over 0.3 s (real time).
+- **Target** **[DECISION]:**
+  - It's a glowing bullseye about 1 m across, hanging **above the centerline** at 4–6 m and drifting slowly side to side, so both teams have equal access.
+  - It stays up for **15 s** or until hit, with a chime and a HUD arrow when it appears.
+  - Any live ball can hit it, from either team. The ball goes dead and drops.
+  - The thrower gets **+100 points**.
+  - The 90 s timer counts match play time and carries across rounds. If the target is still up when a round ends, it disappears.
+- **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, possession clock, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
+- **Stacking:** a trigger during slow motion extends it, up to whichever end is later. In a **Full slow motion** match, the random triggers are off, since the match is already slow **[DECISION]**.
+- **Presentation:** audio pitch and tempo drop, a slight desaturation and vignette, a "SLOW-MO" banner with a countdown, and a whoosh on entry and exit.
+- **Bots** see the same slowed world, so their reactions stay fair.
+
+### 4.8 Playtest 1 changes (owner feedback, 2026-09-28)
+
+| # | Change | Where specified | Status |
+|---|---|---|---|
+| P1 | Larger balls (Standard 0.30 m, Speed 0.27 m, Heavy 0.34 m) | §4.5 | Planned |
+| P2 | **E** picks up and catches, in addition to left click | §4.1, §4.3 | Planned |
+| P3 | **A/D + Space** sidestep dash | §4.1, §4.2 | Planned |
+| P4 | Heavy ball: longer wind-up (0.65 s), +50% range (13.5 m/s) | §4.3.1, §4.5 | Planned |
+| P5 | First-person arms and hands. Proper voxel hands on all characters, with open (catch), grip (carry/shield) and relaxed poses. | §4.6, §11.2 | Planned |
+| P6 | Physics-based blocking: hold RMB for a shield stance, and thrown balls bounce off the held ball | §4.3.3 | Planned |
+| P7 | Balls keep their colour on the ground. Thrown (live) balls get a glowing outline. | §4.4 | Planned |
+| P8 | Slow motion: 50% on a headshot KO (rest of round), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | Planned |
 
 ---
 
@@ -408,7 +456,7 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 ### 9.2 Pre-match lobby (social space)
 - A small walkable "locker room / gym foyer" map. Players can run, slide, jump, and throw practice balls at each other with **no knockouts**, only physics fun. The ragdoll from a hit is limited to a short stagger so it doesn't become harassment.
 - **Team swap:** stand on the Blue or Red team pad. Team sizes are capped at ±1 of each other unless the host allows uneven teams.
-- **Host panel:** mode, arena, and ball mix, plus start and kick. Kicking is available only in private rooms, with a vote-kick in public rooms (later).
+- **Host panel:** mode, arena, ball mix, and the **Full slow motion** toggle (§4.7), plus start and kick. Kicking is available only in private rooms, with a vote-kick in public rooms (later).
 - **Show-off:** each player's uniform is visible, and a mirror wall lets players see themselves.
 - **Start:** the host clicks Start in private rooms. Public rooms auto-start when 2+ humans are ready, or 45 s after the first human arrives. Bots fill the rest.
 - Text chat is active here too (accounts only).
@@ -522,6 +570,7 @@ Role-gated pages at `/admin`, served by the same Worker.
 
 ### 11.2 Character rig
 - **One shared skeleton** with about 15 bones: pelvis, spine, chest, head, and for each side upper arm, forearm, hand, thigh, shin, and foot.
+- **Hands (Playtest 1):** each hand is a small voxel assembly with a palm, a finger block (hinged at the knuckles), and a thumb. It has three poses: **open** (catch stance, palm facing the ball), **grip** (carrying or shielding, fingers wrapped around the ball), and **relaxed**. Hands must read clearly at a distance, because a catch attempt is a tell other players react to.
 - Each body segment is a rigid voxel mesh parented to one bone. There is no skinned mesh, which is cheap to render and trivially ragdolls.
 - **Ragdoll:** each segment is a physics body (capsule or box) linked by joints with angular limits. The limits are tuned for comedy but still anatomically plausible.
 - **Animation:** a small procedural and keyframed set: idle, run, sprint, crouch, slide, jump, wind-up (per ball weight), throw, catch stance, catch success, block, jarred, get-up, victory, and defeat. **Active ragdoll blending** is a stretch goal: a partial physics reaction layered on animation for pushes and jarring.
@@ -980,6 +1029,8 @@ export const speedBall: BallDef = {
 - A minimal HUD (held ball, stamina, catch-window feedback) and placeholder audio.
 - Practice mode in a Web Worker.
 
+- **Playtest 1 changes P1–P8** (§4.8): the next build.
+
 **Exit criteria:** 5+ students play it and ask to play again. The catch/block feel is tuned. There's a gameplay video of the owner's favourite moments.
 
 #### Phase 2: Networked Core (Weeks 8–12)
@@ -1131,7 +1182,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 ### 17.2 Gameplay rules
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
-| Q-G1 | A | Do **headshots** count as knockouts? | Yes |
+| Q-G1 | ✅ | Headshots count as knockouts. Implied by Playtest 1: a headshot KO can trigger slow motion. | — |
 | Q-G2 | B | Does a ball that hits one player **stay live** and knock out a second (double KO)? Do **deflected (blocked)** balls stay live (bounce-outs)? | Yes to both |
 | Q-G3 | B | Should the real-dodgeball **"save"** rule exist (a teammate catches a ball that just hit you)? | Not in v1 |
 | Q-G4 | B | Max balls held at once: 1 or 2? | 1 |
@@ -1140,6 +1191,12 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Q-G7 | B | Are you happy with the possession clock (10 s) and round overtime (shrinking court) as anti-stall rules? | Yes |
 | Q-G8 | B | Match timeout tiebreak: is sudden death OK? | Yes |
 | Q-G9 | C | Which revive order: first-out-first-in, or the catcher chooses? | First out, first in |
+| Q-G10 | A | Does **headshot** slow motion last the **rest of the round**, or a fixed time like the target's 12 s (say 4 s)? | Rest of the round |
+| Q-G11 | A | **Block stance:** is walking speed with no time limit the right cost? Or should the shield also drain stamina? | Walk speed, no time limit |
+| Q-G12 | A | **Heavy ball vs shield:** knock the shield ball out of the blocker's hands (heavy continues, still live), or simply bounce off like any other ball? | Knock it out of their hands |
+| Q-G13 | B | **Glow colour** on thrown balls: team-relative (red = opponents', blue = yours), or the ball's own colour? | Team-relative |
+| Q-G14 | B | **Target:** above the centerline, up 15 s, +100 points to the thrower. Anything different (position, visibility, reward)? | As in §4.7 |
+| Q-G15 | B | **Ball sizes** 0.30 / 0.27 / 0.34 m (Standard / Speed / Heavy): about right, or bigger still? | As proposed, tuned in the next playtest |
 
 ### 17.3 Social, safety, and school policy
 | ID | Pri | Question | Proposed default |
@@ -1175,17 +1232,19 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Crouch speed | 2.2 m/s |
 | Jump apex | 0.6 m |
 | Slide | 8.0 m/s start, 0.8 s, cooldown 1.0 s |
+| Sidestep dash | ~2.5 m over 0.2 s, cooldown 0.8 s, 0.4 s stamina |
 | Trip duration | 1.2–2.0 s + 0.6 s get-up |
 | Collision trip threshold | 6 m/s relative speed |
 | Wall trip threshold | ≥ 6 m/s, within 30° of the wall normal |
 | **Ball handling** | |
 | Pickup range / time | 1.6 m / 0.15 s |
-| Throw wind-up (Std/Spd/Hvy) | 0.25 / 0.25 / 0.50 s |
+| Throw wind-up (Std/Spd/Hvy) | 0.25 / 0.25 / 0.65 s |
+| Ball diameter (Std/Spd/Hvy) | 0.30 / 0.27 / 0.34 m |
+| Heavy throw speed | 13.5 m/s (range ~11.5 m) |
 | Max aim charge | 1.2 s |
 | Catch window / cooldown | 0.35 s / 0.5 s |
 | Catch volume / view cone | 0.7 m / 35° (Speed ball: 0.6 m / 30°) |
-| Block window / cooldown | 0.35 s / 0.4 s |
-| Block wind-up (holding Std or Spd / holding Hvy) | 0.05 / 0.20 s |
+| Block | Physics shield while RMB held; raise time 0.10 s (Std/Spd) / 0.25 s (Hvy); shield 0.45 m in front of chest; walk speed while raised |
 | Possession clock | warn 8 s, dead at 10 s |
 | **Balls per Classic match** (by total players) | 6 players: 4 balls; 10 players: 6 balls; 16 players: 8 balls. Default mix: 60% Standard, 25% Speed, 15% Heavy. |
 | **Rules** | |
@@ -1196,6 +1255,10 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Ultimate phases | Brawl 8:00, Last Stand 2:00 |
 | Dynamic line warning / grace | 3 s / 1.5 s |
 | Inflatable respawn | 30 s |
+| **Slow motion** | |
+| Time scale / ease | 0.4× / 0.3 s |
+| Headshot trigger | 50% chance, rest of round |
+| Target | every 90 s of play, up 15 s, 12 s of slow motion on hit, +100 points |
 
 ### 18.2 Epic backlog (for issue tracking)
 
