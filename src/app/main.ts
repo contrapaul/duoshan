@@ -43,6 +43,7 @@ function ballMix(mix: string, players: number): BallType[] {
 
 let running: { stop: () => void } | undefined;
 let input: LocalInput | undefined;
+let hud: Hud | undefined;
 
 async function start(): Promise<void> {
   const s = readSettings();
@@ -61,7 +62,8 @@ async function start(): Promise<void> {
   input ??= new LocalInput(canvas);
   input.sensitivity = s.sensitivity / 1000;
   input.yaw = state.players[LOCAL]!.yaw;
-  const hud = new Hud(LOCAL);
+  hud = new Hud(LOCAL);
+  const h = hud;
   $('loading').classList.add('hidden');
   $('hud').classList.remove('hidden');
 
@@ -106,7 +108,7 @@ async function start(): Promise<void> {
         const events = step(state, inputs);
         view.onEvents(state, events);
         view.stepPhysics(state.dt, state);
-        hud.onEvents(state, events);
+        h.onEvents(state, events);
         playEvents(events, LOCAL, state.timeScale);
         if (events.some((e) => e.t === 'revive' && e.player === LOCAL) || (state.phase === 'countdown' && lastPhase !== 'countdown')) {
           input!.yaw = state.players[LOCAL]!.yaw;
@@ -130,7 +132,7 @@ async function start(): Promise<void> {
       const info = view.renderer.info.render;
       perfText = `${Math.round(1000 / avg)} fps · p95 ${p95.toFixed(1)} ms · sim ${simMs.toFixed(2)} ms · ${info.calls} draws · ${state.players.length} players`;
     }
-    hud.update(state, dt, perfText, view.thirdPerson);
+    h.update(state, dt, perfText, view.thirdPerson);
   };
   raf = requestAnimationFrame(frame);
 
@@ -156,4 +158,9 @@ $('play').onclick = () => void start();
 $('quit').onclick = () => { running?.stop(); running = undefined; showMenu(); };
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyH') $('help').classList.toggle('hidden');
+  // Hold Tab for the scoreboard (§4.9).
+  if (e.code === 'Tab' && hud) { e.preventDefault(); hud.showScoreboard = true; }
+});
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Tab' && hud) hud.showScoreboard = false;
 });

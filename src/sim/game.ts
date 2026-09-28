@@ -11,7 +11,7 @@ import {
   rightDir, scale, sub, v3, viewDir, type Vec3,
 } from './math';
 import { nextFloat, nextInt } from './rng';
-import { BALLS, DT, GRAVITY, HANDLING, PLAYER, RULES, SLOWMO, type BallType } from './tuning';
+import { BALLS, DT, GRAVITY, HANDLING, PLAYER, RULES, SCORE, SLOWMO, type BallType } from './tuning';
 import type { Ball, GameState, Player, PlayerInput, SimEvent, Team } from './types';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ export function createGame(opts: GameOptions): GameState {
       action: { kind: 'none' }, catchCooldown: 0, dashCooldown: 0,
       forceT: 0, forceDur: 0, forceVel: v3(),
       prevPrimary: false, prevUse: false, prevJump: false,
-      kos: 0, catches: 0, blocks: 0, coins: 0,
+      kos: 0, catches: 0, blocks: 0, coins: 0, score: 0,
     });
   }
   const ballTypes = opts.ballTypes ?? defaultBallTypes(players.length);
@@ -161,7 +161,10 @@ export function step(state: GameState, inputs: readonly PlayerInput[]): SimEvent
   if (state.phase === 'round_end' || state.phase === 'match_end') {
     state.phaseT -= DT;
     if (state.phaseT <= 0) {
-      if (state.phase === 'match_end') state.score = [0, 0];
+      if (state.phase === 'match_end') {
+        state.score = [0, 0];
+        for (const p of state.players) { p.score = 0; p.kos = 0; p.catches = 0; p.blocks = 0; }
+      }
       state.round = state.phase === 'match_end' ? 1 : state.round + 1;
       resetRound(state);
       state.phase = 'countdown';
@@ -212,7 +215,7 @@ function updateTimeScale(state: GameState): void {
   state.dt = DT * state.timeScale;
 }
 
-function startSlowmo(state: GameState, cause: 'headshot' | 'target', seconds: number): void {
+function startSlowmo(state: GameState, cause: 'big_oof' | 'target', seconds: number): void {
   if (state.fullSlow) return;
   state.slowT = Math.max(state.slowT, seconds);
   state.events.push({ t: 'slowmo', cause, seconds });
@@ -600,7 +603,7 @@ function trip(state: GameState, p: Player, cause: 'wall' | 'collision' | 'heavy'
 
 function knockOut(
   state: GameState, p: Player, byId: number, ballId: number,
-  cause: Extract<SimEvent, { t: 'ko' }>['cause'], point: Vec3, impulse: Vec3,
+  cause: Extract<SimEvent, { t: 'ko' }>['cause'], point: Vec3, impulse: Vec3, extra: string[] = [],
 ): void {
   if (p.life === 'out') return;
   if (p.held >= 0) dropBall(p, state.balls[p.held]!);
@@ -621,7 +624,10 @@ function knockOut(
       if (ball.deflectedBy >= 0) special.push('bounce_out');
     }
     if (!state.firstKoThisRound) special.push('first');
+    // A catch is scored as a catch (below), not as a knockout.
+    if (cause !== 'catch') by.score += SCORE.ko + special.reduce((sum, s) => sum + (SCORE.special[s] ?? 0), 0);
   }
+  special.push(...extra);
   state.firstKoThisRound = true;
   state.events.push({ t: 'ko', player: p.id, by: byId, ball: ballId, cause, point, impulse, seed: nextInt(state.rng, 1 << 30), special });
 }
@@ -652,6 +658,8 @@ function checkRoundEnd(state: GameState): void {
     if (aliveCount(state, team) === 0) {
       const winner = (1 - team) as Team;
       state.score[winner]++;
+      const matchWon = state.score[winner] >= RULES.roundsToWin;
+      for (const p of state.players) if (p.team === winner) p.score += SCORE.roundWin + (matchWon ? SCORE.matchWin : 0);
       state.events.push({ t: 'round_end', winner, score: [state.score[0], state.score[1]] });
       if (state.score[winner] >= RULES.roundsToWin) {
         state.phase = 'match_end';
@@ -782,9 +790,9 @@ function collideBallPlayers(state: GameState, ball: Ball): void {
     if (live && p.protectT <= 0) {
       ball.hits.push(p.id);
       const impulse = scale(ball.vel, def.koImpulse * 0.15);
-      const headshot = ball.pos.y > p.pos.y + playerHeight(p) - SLOWMO.headZone;
-      knockOut(state, p, ball.thrower, ball.id, 'hit', point, impulse);
-      if (headshot && nextFloat(state.rng) < SLOWMO.headshotChance) startSlowmo(state, 'headshot', SLOWMO.headshotSeconds);
+      const bigOof = ball.pos.y > p.pos.y + playerHeight(p) - SLOWMO.headZone;
+      knockOut(state, p, ball.thrower, ball.id, 'hit', point, impulse, bigOof ? ['big_oof'] : []);
+      if (bigOof && nextFloat(state.rng) < SLOWMO.bigOofChance) startSlowmo(state, 'big_oof', SLOWMO.bigOofSeconds);
       // The ball stays live after a knockout and can take out a second player (§4.4 rule 3).
       ball.vel = scale(reflect(ball.vel, n), 0.35);
       ball.pos = add(point, scale(n, def.radius + PLAYER.radius + 0.01));
@@ -850,6 +858,7 @@ function checkCatch(state: GameState, ball: Ball): boolean {
     p.held = ball.id;
     p.heldT = 0;
     p.catches++;
+    p.score += SCORE.catch;
     p.action = { kind: 'none' };
     if (def.type === 'speed') shove(p, norm(v3(-toBall.x, 0, -toBall.z)), 2, 0.2); // jarring
     state.events.push({ t: 'catch', player: p.id, ball: ball.id, thrower: ball.thrower });
@@ -896,6 +905,7 @@ function collideBallShields(state: GameState, ball: Ball): void {
       ball.deflectedBy = p.id;
       if (!ball.hits.includes(p.id)) ball.hits.push(p.id);
       p.blocks++;
+      p.score += SCORE.block;
       state.events.push({ t: 'block', player: p.id, ball: ball.id, broke: def.breaksShield });
     } else {
       state.events.push({ t: 'bounce', ball: ball.id, speed: impact, surface: 'player' });

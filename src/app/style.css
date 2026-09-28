@@ -55,5 +55,19 @@ button.secondary { background: #3a4456; color: var(--ink); }
 #coins { position: absolute; top: 64px; left: 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
 /* Slow motion: desaturate and vignette (§4.7). */
 canvas#game { transition: filter 0.3s; }
-body.slowmo canvas#game { filter: saturate(0.5) contrast(1.1); }
+body.slowmo canvas#game { filter: saturate(0.8) contrast(1.05); }
 body.slowmo #hud::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55)); }
+#feed div { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+#feed .ico { vertical-align: middle; filter: drop-shadow(0 1px 2px #000); }
+#scoreboard { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); width: min(920px, calc(100vw - 32px)); background: var(--panel); border-radius: 10px; padding: 14px 18px; text-shadow: none; }
+.sb-head { text-align: center; font-weight: 700; margin-bottom: 10px; opacity: 0.85; }
+.sb-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 700px) { .sb-teams { grid-template-columns: 1fr; } }
+#scoreboard h3 { margin: 0 0 6px; font-size: 16px; }
+#scoreboard table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#scoreboard th { text-align: left; font-weight: 600; opacity: 0.6; padding: 3px 4px; }
+#scoreboard td { padding: 4px; border-top: 1px solid #2c3444; }
+#scoreboard td.name small { opacity: 0.55; }
+#scoreboard tr.dim td { opacity: 0.45; }
+#scoreboard tr.me td { color: var(--accent); }
+#scoreboard td { white-space: nowrap; }

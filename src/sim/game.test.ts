@@ -301,7 +301,7 @@ describe('playtest 1 changes', () => {
     expect(s.target).not.toBeNull();
   });
 
-  it('headshot knockouts start 8 s of slow motion about half the time', () => {
+  it('Big oof knockouts (head hits) start 8 s of slow motion about half the time', () => {
     let slow = 0;
     let heads = 0;
     for (let seed = 1; seed <= 40; seed++) {
@@ -321,7 +321,9 @@ describe('playtest 1 changes', () => {
         ev.push(...step(s, inputs));
       }
       if (b.life === 'out') heads++;
-      if (ev.some((x) => x.t === 'slowmo' && x.cause === 'headshot' && x.seconds === 8)) slow++;
+      if (ev.some((x) => x.t === 'slowmo' && x.cause === 'big_oof' && x.seconds === 8)) slow++;
+      const ko = ev.find((x) => x.t === 'ko');
+      if (ko && ko.t === 'ko' && b.life === 'out') expect(ko.special).toContain('big_oof');
     }
     expect(heads).toBeGreaterThan(20);
     expect(slow / heads).toBeGreaterThan(0.25);
@@ -335,5 +337,40 @@ describe('playtest 1 changes', () => {
     runTicks(s, 10);
     expect(s.timeScale).toBeCloseTo(0.4);
     expect(s.target).toBeNull();
+  });
+});
+
+describe('scoring', () => {
+  it('scores 100 + 50 (first) for the first knockout, and 150 for a catch', () => {
+    const s = createGame({ seed: 5, teamSize: 1 });
+    live(s);
+    const [a, b] = s.players as [GameState['players'][0], GameState['players'][0]];
+    a.pos = v3(-5, 0, 0); b.pos = v3(5, 0, 0);
+    const ball = s.balls[0]!;
+    ball.state = 'held'; ball.holder = a.id; a.held = ball.id;
+    const { yaw, pitch } = aimAt(a, b, 18, 1);
+    for (let t = 0; t < 180 && b.life !== 'out'; t++) {
+      const inputs = idle(s);
+      inputs[0] = { ...NO_INPUT, yaw, pitch, primary: t < 72 };
+      step(s, inputs);
+    }
+    // Knockout 100 + first 50, plus 100 for winning the round (1v1).
+    expect(a.score).toBe(250);
+
+    const c = createGame({ seed: 3, teamSize: 1 });
+    live(c);
+    const [ca, cb] = c.players as [GameState['players'][0], GameState['players'][0]];
+    ca.pos = v3(-5, 0, 0); cb.pos = v3(5, 0, 0); cb.yaw = Math.PI;
+    const cball = c.balls[0]!;
+    cball.state = 'held'; cball.holder = ca.id; ca.held = cball.id;
+    const aim = aimAt(ca, cb, 18, 1);
+    for (let t = 0; t < 180; t++) {
+      const inputs = idle(c);
+      inputs[0] = { ...NO_INPUT, yaw: aim.yaw, pitch: aim.pitch, primary: t < 72 };
+      inputs[1] = { ...NO_INPUT, yaw: Math.PI, pitch: 0.05, primary: t >= 94 };
+      step(c, inputs);
+    }
+    expect(cb.catches).toBe(1);
+    expect(cb.score).toBe(150 + 100); // catch + round win
   });
 });

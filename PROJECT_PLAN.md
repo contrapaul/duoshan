@@ -289,13 +289,13 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 
 | # | Change | Status |
 |---|---|---|
-| Q1 | **"Headshot" is now "Big oof"** everywhere: rules, HUD, feed, code. The mechanic is unchanged. | Planned |
-| Q2 | **"Whiff" is now "Dodge":** the on-screen word when a catch attempt misses | Planned |
-| Q3 | **Tab scoreboard** (hold Tab) | Planned |
-| Q4 | **Knockout feed**, top right, fading in and out: `Player [icon] Player` | Planned |
-| Q5 | **Icons** for thrown-ball knockouts, Big oofs, and catches | Planned |
-| Q6 | **Slow motion desaturation reduced:** colour stays at 80% saturation (was 50%) | Planned |
-| Q7 | **Kill camera:** a few seconds of third person, locked on your own character, when you're knocked out | Planned |
+| Q1 | **"Headshot" is now "Big oof"** everywhere: rules, HUD, feed, code. The mechanic is unchanged. | ✅ Built, awaiting playtest |
+| Q2 | **"Whiff" is now "Dodge":** the on-screen word when a catch attempt misses | ✅ Built, awaiting playtest |
+| Q3 | **Tab scoreboard** (hold Tab) | ✅ Built, awaiting playtest |
+| Q4 | **Knockout feed**, top right, fading in and out: `Player [icon] Player` | ✅ Built, awaiting playtest |
+| Q5 | **Icons** for thrown-ball knockouts, Big oofs, and catches | ✅ Built, awaiting playtest |
+| Q6 | **Slow motion desaturation reduced:** colour stays at 80% saturation (was 50%) | ✅ Built, awaiting playtest |
+| Q7 | **Kill camera:** a few seconds of third person, locked on your own character, when you're knocked out | ✅ Built, awaiting playtest |
 
 **Tab scoreboard (Q3).** Hold **Tab** to show a centred panel. It replaces the "Scoreboard" placeholder in §4.1.
 - Header: round score (Blue x : y Red) and round number.
@@ -1071,7 +1071,7 @@ export const speedBall: BallDef = {
 - Practice mode in a Web Worker.
 
 - **Playtest 1 changes P1–P8** (§4.8): built.
-- **Playtest 2 changes Q1–Q7** (§4.9): the next build.
+- **Playtest 2 changes Q1–Q7** (§4.9): built.
 
 **Exit criteria:** 5+ students play it and ask to play again. The catch/block feel is tuned. There's a gameplay video of the owner's favourite moments.
 

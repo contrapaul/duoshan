@@ -111,13 +111,24 @@ export const RULES = {
   spawnProtection: 1.0,
 };
 
+/** In-match score (PROJECT_PLAN.md §6.1). */
+export const SCORE = {
+  ko: 100,
+  catch: 150,
+  block: 50,
+  roundWin: 100,
+  matchWin: 300,
+  special: { first: 50, double: 100, bounce_out: 75, slide: 50, airborne: 50 } as Record<string, number>,
+};
+
 /** Slow motion (PROJECT_PLAN.md §4.7). Durations are real seconds. */
 export const SLOWMO = {
   scale: 0.4,
   /** Time-scale change per real second (1 → 0.4 in 0.3 s). */
   easeRate: 2,
-  headshotChance: 0.5,
-  headshotSeconds: 8,
+  /** A "Big oof" is a live ball hitting the head (top headZone metres of the body). */
+  bigOofChance: 0.5,
+  bigOofSeconds: 8,
   headZone: 0.3,
   targetEvery: 90,
   targetUp: 15,

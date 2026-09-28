@@ -1,15 +1,33 @@
-/** DOM HUD: score, alive counts, stamina, charge, kill feed, banners, perf stats. */
+/** DOM HUD: score, alive counts, stamina, charge, knockout feed, Tab scoreboard, banners, perf. */
 import { BALLS, HANDLING, PLAYER } from '../sim/tuning';
-import type { GameState, SimEvent } from '../sim/types';
+import type { BallType } from '../sim/tuning';
+import type { GameState, Player, SimEvent } from '../sim/types';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const SPECIAL_LABEL: Record<string, string> = {
-  slide: 'SLIDE', airborne: 'AIRBORNE', double: 'DOUBLE', bounce_out: 'BOUNCE-OUT', first: 'FIRST BLOOD',
+  slide: 'SLIDE', airborne: 'AIRBORNE', double: 'DOUBLE', bounce_out: 'BOUNCE-OUT', first: 'FIRST OUT',
 };
+
+// Knockout feed icons (PROJECT_PLAN.md §4.9): small inline SVGs, no downloads.
+const BALL_HEX: Record<BallType, string> = { standard: '#e03131', speed: '#ff7b00', heavy: '#3b6fe0' };
+const ICON = {
+  ball: (type: BallType) => `<svg class="ico" viewBox="-10 0 30 20" width="30" height="20"><path d="M-9 7h6M-10 10h7M-9 13h6" stroke="#fff" stroke-width="1.5" opacity=".6"/><circle cx="10" cy="10" r="8" fill="${BALL_HEX[type]}"/><path d="M2.5 8q7.5 3.5 15 0M2.5 12q7.5-3.5 15 0" stroke="#fff" stroke-width="1.2" fill="none" opacity=".7"/></svg>`,
+  bigOof: '<svg class="ico" viewBox="0 0 22 20" width="22" height="20"><rect x="3" y="5" width="12" height="13" rx="1" fill="#d9a066"/><rect x="11" y="9" width="2" height="2" fill="#111"/><path d="M15 0l1.6 3.4 3.8.4-2.8 2.5.8 3.7L15 8.1 11.6 10l.8-3.7L9.6 3.8l3.8-.4z" fill="#ffdd33"/></svg>',
+  catch: (type: BallType) => `<svg class="ico" viewBox="0 0 30 20" width="30" height="20"><circle cx="15" cy="10" r="6.5" fill="${BALL_HEX[type]}"/><path d="M1 4h5v3h3v9H4q-3 0-3-3z" fill="#e0ac69"/><path d="M29 4h-5v3h-3v9h5q3 0 3-3z" fill="#e0ac69"/></svg>`,
+  line: '<svg class="ico" viewBox="0 0 14 20" width="14" height="20"><path d="M7 1v18" stroke="#ffdd33" stroke-width="3" stroke-dasharray="3 2"/></svg>',
+  target: '<svg class="ico" viewBox="0 0 20 20" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#ffdd33"/><circle cx="10" cy="10" r="6" fill="#e63946"/><circle cx="10" cy="10" r="3" fill="#fff"/></svg>',
+};
+
+/** Feed timing: fade in, hold, fade out (seconds). */
+const FEED_IN = 0.2;
+const FEED_HOLD = 5;
+const FEED_OUT = 0.6;
+const FEED_MAX = 5;
 
 export class Hud {
   private feed: { text: string; t: number }[] = [];
+  showScoreboard = false;
   private flash = { text: '', t: 0 };
   private banner = { text: '', t: 0 };
 
@@ -23,37 +41,36 @@ export class Hud {
       return `<b class="${color}">${p.id === this.local ? 'You' : p.name}</b>`;
     };
     for (const e of events) {
-      if (e.t === 'ko') {
-        const how = e.cause === 'line' ? 'crossed the line' : e.cause === 'catch' ? 'got caught out' : e.cause.startsWith('heavy') ? 'tried to stop a heavy ball' : 'is out';
-        const by = e.by >= 0 && e.cause !== 'catch' ? `${name(e.by)} ➜ ` : '';
-        const tags = e.special.map((s) => `<i>${SPECIAL_LABEL[s] ?? s}</i>`).join(' ');
-        const verb = e.player === this.local ? how.replace(/^is /, 'are ') : how;
-        this.feed.push({ text: `${by}${name(e.player)} ${verb} ${tags}`, t: 6 });
-        if (e.player === this.local) this.showFlash(e.cause === 'line' ? 'CENTERLINE!' : 'OUT!');
+      // The feed is about knockouts: Thrower [icon] Knocked-out player (§4.9).
+      if (e.t === 'ko' && e.cause !== 'catch') {
+        const type = state.balls[e.ball]?.type ?? 'standard';
+        const tags = e.special.filter((x) => SPECIAL_LABEL[x]).map((x) => `<i>${SPECIAL_LABEL[x]}</i>`).join(' ');
+        const icon = e.cause === 'line' ? ICON.line : ICON.ball(type) + (e.special.includes('big_oof') ? ICON.bigOof : '');
+        const by = e.by >= 0 && e.cause !== 'line' ? `${name(e.by)} ` : '';
+        this.feed.push({ text: `${by}${icon} ${name(e.player)} ${tags}`, t: 0 });
+        if (e.player === this.local) this.showFlash(e.cause === 'line' ? 'CENTERLINE!' : e.special.includes('big_oof') ? 'BIG OOF!' : 'OUT!');
       }
       if (e.t === 'catch') {
-        this.feed.push({ text: `${name(e.player)} CAUGHT it!`, t: 6 });
+        const type = state.balls[e.ball]?.type ?? 'standard';
+        this.feed.push({ text: `${name(e.player)} ${ICON.catch(type)} ${name(e.thrower)}`, t: 0 });
         if (e.player === this.local) this.showFlash('CATCH!');
+        if (e.thrower === this.local) this.showFlash('CAUGHT OUT!');
       }
       if (e.t === 'block' && e.player === this.local) this.showFlash(e.broke ? 'HEAVY BALL! Shield knocked away' : 'BLOCK!');
-      if (e.t === 'block' && e.broke && e.player !== this.local) this.feed.push({ text: `${name(e.player)} blocked a heavy ball and lost their grip`, t: 4 });
-      if (e.t === 'slowmo') this.showBanner(e.cause === 'headshot' ? 'HEADSHOT · SLOW-MO' : 'TARGET HIT · SLOW-MO', 2);
-      if (e.t === 'target_spawn') { this.showBanner('TARGET!', 1.5); this.feed.push({ text: 'A target appeared above the centerline: hit it for slow motion', t: 6 }); }
+      if (e.t === 'slowmo') this.showBanner(e.cause === 'big_oof' ? 'BIG OOF · SLOW-MO' : 'TARGET HIT · SLOW-MO', 2);
+      if (e.t === 'target_spawn') this.showBanner('TARGET! Hit it for slow motion', 2);
       if (e.t === 'target_hit') {
-        this.feed.push({ text: `${name(e.player)} hit the target <i>+${e.coins} DODGECOINS</i>`, t: 6 });
+        this.feed.push({ text: `${name(e.player)} ${ICON.target} <i>+${e.coins}</i>`, t: 0 });
         if (e.player === this.local) this.showFlash(`+${e.coins} Dodgecoins`);
       }
-      if (e.t === 'catch_whiff' && e.player === this.local) this.showFlash('whiff');
-      if (e.t === 'trip') {
-        this.feed.push({ text: `${name(e.player)} tripped${e.cause === 'wall' ? ' into a wall' : e.cause === 'heavy' ? ' over a heavy ball' : ''}`, t: 4 });
-      }
+      if (e.t === 'catch_whiff' && e.player === this.local) this.showFlash('Dodge');
       if (e.t === 'revive' && e.player === this.local) this.showFlash('BACK IN!');
       if (e.t === 'possession_drop' && e.player === this.local) this.showFlash('Too slow! Ball dropped');
       if (e.t === 'round_start') this.showBanner('DODGE!', 1.2);
       if (e.t === 'round_end') this.showBanner(`${e.winner === state.players[this.local]!.team ? 'Your team' : 'Other team'} wins the round`, 3);
       if (e.t === 'match_end') this.showBanner(`${e.winner === state.players[this.local]!.team ? 'YOU WIN THE MATCH' : 'Match lost'}`, 3);
     }
-    if (this.feed.length > 6) this.feed.splice(0, this.feed.length - 6);
+    if (this.feed.length > FEED_MAX) this.feed.splice(0, this.feed.length - FEED_MAX);
   }
 
   private showFlash(text: string): void { this.flash = { text, t: 1.0 }; }
@@ -85,9 +102,14 @@ export class Hud {
     f.textContent = this.flash.t > 0 ? this.flash.text : '';
     f.style.opacity = String(Math.max(0, Math.min(1, this.flash.t * 2)));
 
-    for (const x of this.feed) x.t -= dt;
-    this.feed = this.feed.filter((x) => x.t > 0);
-    $('feed').innerHTML = this.feed.map((x) => `<div>${x.text}</div>`).join('');
+    // Knockout feed: each entry fades in, holds, then fades out.
+    for (const x of this.feed) x.t += dt;
+    this.feed = this.feed.filter((x) => x.t < FEED_IN + FEED_HOLD + FEED_OUT);
+    $('feed').innerHTML = this.feed.map((x) => {
+      const o = x.t < FEED_IN ? x.t / FEED_IN : x.t < FEED_IN + FEED_HOLD ? 1 : 1 - (x.t - FEED_IN - FEED_HOLD) / FEED_OUT;
+      return `<div style="opacity:${o.toFixed(2)}">${x.text}</div>`;
+    }).join('');
+    this.drawScoreboard(state);
 
     // Stamina + held ball + aim charge.
     $('stamina').style.width = `${(me.stamina / PLAYER.staminaMax) * 100}%`;
@@ -114,5 +136,31 @@ export class Hud {
     const target = state.target ? `🎯 TARGET above the centerline · ${Math.ceil(state.target.t)}s · +100 Dodgecoins` : '';
     $('status').textContent = [slow, target].filter(Boolean).join('  ·  ');
     $('coins').textContent = me.coins ? `${me.coins} Dodgecoins` : '';
+  }
+
+  /** Hold Tab: every player, their status and scores (§4.9). */
+  private drawScoreboard(state: GameState): void {
+    const el = $('scoreboard');
+    el.classList.toggle('hidden', !this.showScoreboard);
+    if (!this.showScoreboard) return;
+    const me = state.players[this.local]!;
+    const status = (p: Player) => {
+      if (p.life === 'tripped') return 'Tripped';
+      if (p.life !== 'out') return 'In';
+      if (p.reviveT > 0) return 'Returning';
+      const queue = state.players.filter((q) => q.team === p.team && q.life === 'out' && q.reviveT <= 0).sort((a, b) => a.outOrder - b.outOrder);
+      return `Out · #${queue.indexOf(p) + 1}`;
+    };
+    const team = (t: 0 | 1) => {
+      const rows = state.players.filter((p) => p.team === t).sort((a, b) => b.score - a.score).map((p) => `
+        <tr class="${p.life === 'out' ? 'dim' : ''} ${p.id === this.local ? 'me' : ''}">
+          <td class="name">${p.id === this.local ? 'You' : p.name}${p.bot ? ' <small>[BOT]</small>' : ''}</td>
+          <td>${status(p)}</td><td>${p.kos}</td><td>${p.catches}</td><td>${p.blocks}</td><td><b>${p.score}</b></td><td>${p.coins}</td>
+        </tr>`).join('');
+      const cls = t === me.team ? 'mate' : 'foe';
+      return `<div class="team"><h3 class="${cls}">${t === 0 ? 'BLUE' : 'RED'} · ${state.score[t]}</h3>
+        <table><tr><th>Player</th><th>Status</th><th>KOs</th><th>Catches</th><th>Blocks</th><th>Score</th><th>Coins</th></tr>${rows}</table></div>`;
+    };
+    el.innerHTML = `<div class="sb-head">Round ${state.round} · first to 4</div><div class="sb-teams">${team(me.team)}${team((1 - me.team) as 0 | 1)}</div>`;
   }
 }

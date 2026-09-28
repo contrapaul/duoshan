@@ -15,6 +15,7 @@ import { buildGym, createRenderer, type Quality } from './scene';
 const BALL_COLORS = { standard: 0xd62828, speed: 0xff7b00, heavy: 0x1d4ed8 } as const;
 const TEAMMATE = 0x3a86ff;
 const TRAIL_LEN = 10;
+const KILL_CAM_SECONDS = 3;
 const OPPONENT = 0xff2d2d;
 
 export interface Snap {
@@ -45,6 +46,9 @@ export class GameView {
   private target: THREE.Group;
   private ragdollWorld: RagdollWorld;
   thirdPerson = true;
+  /** Kill camera (§4.9): seconds left, and the view direction at the moment you were knocked out. */
+  private killCamT = 0;
+  private killCamYaw = 0;
   private local: number;
 
   private constructor(canvas: HTMLCanvasElement, state: GameState, local: number, quality: Quality, rw: RagdollWorld, scene: THREE.Scene) {
@@ -115,6 +119,7 @@ export class GameView {
         const imp = new THREE.Vector3(e.impulse.x, e.impulse.y, e.impulse.z);
         if (e.t === 'ko' && imp.lengthSq() > 0.01) imp.y += imp.length() * 0.6; // heavy balls flip people
         const r = this.ragdollWorld.spawn(c, vel, point, imp, e.seed);
+        if (e.t === 'ko' && e.player === this.local) { this.killCamT = KILL_CAM_SECONDS; this.killCamYaw = p.yaw; }
         this.ragdolls.set(e.player, { r, kind: e.t === 'ko' ? 'ko' : 'trip' });
       }
       if (e.t === 'throw') this.chars[e.player]!.throwAnim = 0.25;
@@ -139,6 +144,7 @@ export class GameView {
     const local = state.players[this.local]!;
     for (const p of state.players) this.drawPlayer(state, p, prev.players[p.id]!, alpha, dt, look);
     state.balls.forEach((b, i) => this.drawBall(b, prev.balls[i]!, alpha, state));
+    this.killCamT = local.life === 'out' ? Math.max(0, this.killCamT - dt) : 0;
     this.placeCamera(state, local, prev.players[local.id]!, alpha, look);
     this.drawFpArms(state, local, dt);
     this.target.visible = !!state.target;
@@ -236,6 +242,20 @@ export class GameView {
   }
 
   private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }): void {
+    if (me.life === 'out' && this.killCamT > 0) {
+      // Kill camera: third person, locked on your own flying ragdoll, whatever view you were in.
+      const target = this.chars[me.id]!.meshes.pelvis.getWorldPosition(new THREE.Vector3());
+      const f = viewDir(this.killCamYaw, 0);
+      const b = state.arena.bounds;
+      const want = new THREE.Vector3(
+        Math.min(b.maxX - 0.3, Math.max(b.minX + 0.3, target.x - f.x * 3.5)),
+        Math.min(b.height - 0.3, target.y + 1.6),
+        Math.min(b.maxZ - 0.3, Math.max(b.minZ + 0.3, target.z - f.z * 3.5)),
+      );
+      this.camera.position.lerp(want, 0.2);
+      this.camera.lookAt(target);
+      return;
+    }
     if (me.life === 'out') {
       // Spectate from above your own half.
       const s = me.team === 0 ? -1 : 1;

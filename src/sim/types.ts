@@ -71,6 +71,8 @@ export interface Player {
   prevJump: boolean;
   /** Dodgecoins earned this session (target hits). */
   coins: number;
+  /** In-match score (§6.1). */
+  score: number;
   // Stats (in-match score, §6.1).
   kos: number;
   catches: number;
@@ -101,7 +103,7 @@ export type SimEvent =
   | { t: 'catch'; player: number; ball: number; thrower: number }
   | { t: 'block'; player: number; ball: number; broke: boolean }
   | { t: 'dash'; player: number }
-  | { t: 'slowmo'; cause: 'headshot' | 'target'; seconds: number }
+  | { t: 'slowmo'; cause: 'big_oof' | 'target'; seconds: number }
   | { t: 'target_spawn' }
   | { t: 'target_hit'; player: number; coins: number }
   | { t: 'target_gone' }
