@@ -4,6 +4,7 @@
  * fixed 60 Hz; the same code runs in the Durable Object for online play.
  */
 import { botInputs, createBrain, type BotBrain, type Difficulty } from '../bots/bot';
+import { ARENAS } from '../sim/arena';
 import { createGame, defaultBallTypes, step } from '../sim/game';
 import { DT } from '../sim/tuning';
 import type { BallType } from '../sim/tuning';
@@ -17,7 +18,7 @@ import { LocalInput } from './input';
 const LOCAL = 0;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-interface Settings { teamSize: number; difficulty: Difficulty; quality: Quality; balls: string; slowmo: string; sensitivity: number }
+interface Settings { arena: string; teamSize: number; difficulty: Difficulty; quality: Quality; balls: string; slowmo: string; sensitivity: number }
 
 function readSettings(): Settings {
   let saved: Partial<Settings> = {};
@@ -25,6 +26,7 @@ function readSettings(): Settings {
   const get = (id: string) => ($(id) as HTMLSelectElement | HTMLInputElement);
   for (const [k, v] of Object.entries(saved)) { const el = document.getElementById(`opt-${k}`) as HTMLInputElement | null; if (el) el.value = String(v); }
   return {
+    arena: get('opt-arena').value,
     teamSize: Number(get('opt-teamSize').value),
     difficulty: get('opt-difficulty').value as Difficulty,
     quality: get('opt-quality').value as Quality,
@@ -53,7 +55,8 @@ async function start(): Promise<void> {
   $('menu').classList.add('hidden');
   $('loading').classList.remove('hidden');
 
-  const state = createGame({ seed: (Date.now() & 0xffffff) | 1, teamSize: s.teamSize, humans: [LOCAL], ballTypes: ballMix(s.balls, s.teamSize * 2), fullSlow: s.slowmo === 'full' });
+  const state = createGame({ seed: (Date.now() & 0xffffff) | 1, teamSize: s.teamSize, humans: [LOCAL], ballTypes: ballMix(s.balls, s.teamSize * 2), fullSlow: s.slowmo === 'full',
+    arena: ARENAS.find((a) => a.id === s.arena) ?? ARENAS[0]! });
   const brains = new Map<number, BotBrain>();
   for (const p of state.players) if (p.bot) brains.set(p.id, createBrain(p, s.difficulty, state.rng.s + p.id));
 

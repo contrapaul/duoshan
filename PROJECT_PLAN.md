@@ -452,6 +452,19 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - Players spawn at spread-out pads. Balls spawn at pads that refill in rotation.
 - Sponsor billboards on buildings are prime banner slots (§12).
 
+### 7.5 Offset Court (test arena, built 2026-09-28)
+A testing ground for **non-straight centerlines and cover** before Hypergym (§7.2). It's playable now from the menu.
+- **Hall:** the same as Classic Gym, with an 18 × 9 m court.
+- **Stepped centerline:** for z > 1.5 the line sits at x = +1.5, so Blue's half reaches 1.5 m into Red's side. For z < −1.5 it sits at x = −1.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
+- **Balance by rotation:** every feature on one side has a twin rotated 180° about the court centre. It's "mirrored and flipped", not left-right mirrored.
+- **Walls:** three pairs of chest-high (1.1 m) padded walls:
+  - a midfield wall running along the court
+  - a wall across the court facing the other team's tongue
+  - short cover at the base of each team's own tongue
+  - Balls bounce off them, players can't pass through or step onto them, and ragdolls land on them.
+- **Engine support added for it:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
+- **Known limitation:** bots don't path around walls yet. They slide along them, and their throws can hit walls. Wall-aware bots come with the Hypergym work.
+
 ---
 
 ## 8. Bots and Practice Mode

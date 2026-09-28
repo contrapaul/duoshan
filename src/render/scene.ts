@@ -1,6 +1,6 @@
 /** Greybox Classic Gym scene: floor with court lines, walls, bleachers, banner slots, lights. */
 import * as THREE from 'three';
-import type { ArenaDef } from '../sim/arena';
+import { centerlineX, type ArenaDef } from '../sim/arena';
 
 export type Quality = 'high' | 'low';
 
@@ -29,9 +29,19 @@ function courtTexture(arena: ArenaDef): THREE.CanvasTexture {
   const Z = (z: number) => (z - minZ) * ppm;
   const { halfLength: L, halfWidth: W } = arena.court;
   g.fillStyle = 'rgba(40,90,170,0.25)';
-  g.fillRect(X(-L), Z(-W), L * ppm, 2 * W * ppm);
+  // Each team's half, following the (possibly stepped) centerline.
+  const zs = [-W, ...(arena.centerline ?? []).map((p) => p.z).filter((z) => z > -W && z < W), W];
+  const half = (edge: number) => {
+    g.beginPath();
+    g.moveTo(X(edge), Z(-W));
+    for (const z of zs) g.lineTo(X(centerlineX(arena, z)), Z(z));
+    g.lineTo(X(edge), Z(W));
+    g.closePath();
+    g.fill();
+  };
+  half(-L);
   g.fillStyle = 'rgba(190,40,40,0.25)';
-  g.fillRect(X(0), Z(-W), L * ppm, 2 * W * ppm);
+  half(L);
   g.strokeStyle = '#ffffff';
   g.lineWidth = 5;
   g.strokeRect(X(-L), Z(-W), 2 * L * ppm, 2 * W * ppm);
@@ -42,7 +52,11 @@ function courtTexture(arena: ArenaDef): THREE.CanvasTexture {
   // The centerline.
   g.strokeStyle = '#ffdd33';
   g.lineWidth = 10;
-  g.beginPath(); g.moveTo(X(0), Z(-W - 0.5)); g.lineTo(X(0), Z(W + 0.5)); g.stroke();
+  g.beginPath();
+  g.moveTo(X(centerlineX(arena, -W)), Z(-W - 0.5));
+  for (const z of zs) g.lineTo(X(centerlineX(arena, z)), Z(z));
+  g.lineTo(X(centerlineX(arena, W)), Z(W + 0.5));
+  g.stroke();
   g.fillStyle = 'rgba(255,255,255,0.35)';
   g.font = `bold ${ppm * 1.4}px sans-serif`;
   g.textAlign = 'center';
@@ -86,13 +100,13 @@ export function buildGym(scene: THREE.Scene, arena: ArenaDef, quality: Quality):
   ceiling.position.set(0, height, 0);
   scene.add(ceiling);
 
-  const colors: Record<string, number> = { wall: 0xd9d4c7, bleacher: 0x6b7a8f, stage: 0x8a5a3c, obstacle: 0x999999 };
+  const colors: Record<string, number> = { wall: 0xd9d4c7, bleacher: 0x6b7a8f, stage: 0x8a5a3c, obstacle: 0x2f5d8a };
   for (const b of arena.boxes) {
     const size = new THREE.Vector3(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), new THREE.MeshLambertMaterial({ color: colors[b.kind] }));
     mesh.position.set(b.min.x + size.x / 2, b.min.y + size.y / 2, b.min.z + size.z / 2);
     mesh.receiveShadow = b.kind !== 'wall';
-    mesh.castShadow = b.kind === 'bleacher' || b.kind === 'stage';
+    mesh.castShadow = b.kind !== 'wall';
     scene.add(mesh);
   }
   // Wall stripe + banner slots.

@@ -5,7 +5,8 @@
  * Human-like limits: reaction delay, aim error, and a per-ball decision to catch,
  * block or dodge made once when the bot "notices" the throw.
  */
-import { eyePos, findPickup, teamSign } from '../sim/game';
+import { centerlineX } from '../sim/arena';
+import { eyePos, findPickup, sideDepth, teamSign } from '../sim/game';
 import { angleDiff, clamp, dist, distXZ, dot, len, norm, rightDir, sub, v3, viewDir, type Vec3 } from '../sim/math';
 import { nextFloat, nextGauss, type Rng } from '../sim/rng';
 import { BALLS, GRAVITY } from '../sim/tuning';
@@ -108,7 +109,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       const aim = aimAt(p, target, def.speedQuick, def.gravityScale);
       brain.yaw = turnToward(brain.yaw, aim.yaw + brain.errYaw, skill.turn);
       brain.pitch = aim.pitch + brain.errPitch;
-      const x = sign * brain.wanderX;
+      const x = centerlineX(state.arena, p.pos.z) + sign * brain.wanderX;
       wish = norm(v3(x - p.pos.x, 0, brain.strafe * 3));
       const range = def.type === 'heavy' ? 11 : 17;
       const aligned = Math.abs(angleDiff(brain.yaw, aim.yaw + brain.errYaw)) < 0.08;
@@ -126,7 +127,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
         brain.holdT = 0;
       }
     }
-    return finish(p, brain, wish, sprint, crouch, jump, primary, secondary, undefined);
+    return finish(state, p, brain, wish, sprint, crouch, jump, primary, secondary, undefined);
   } else {
     // 3. Empty-handed: go get the nearest free ball on our side.
     const ball = nearestFreeBall(state, p);
@@ -137,15 +138,15 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       if (findPickup(state, p)?.id === ball.id && !brain.primary) primary = true;
     } else {
       // Nothing to grab: hang back and strafe, facing the other team.
-      wish = norm(v3(sign * 6 - p.pos.x, 0, brain.strafe * 2));
+      wish = norm(v3(centerlineX(state.arena, p.pos.z) + sign * 6 - p.pos.x, 0, brain.strafe * 2));
       lookAt = v3(-sign * 6, 1.2, p.pos.z);
     }
   }
-  return finish(p, brain, wish, sprint, crouch, jump, primary, secondary, lookAt);
+  return finish(state, p, brain, wish, sprint, crouch, jump, primary, secondary, lookAt);
 }
 
 function finish(
-  p: Player, brain: BotBrain, wish: Vec3, sprint: boolean, crouch: boolean, jump: boolean,
+  state: GameState, p: Player, brain: BotBrain, wish: Vec3, sprint: boolean, crouch: boolean, jump: boolean,
   primary: boolean, secondary: boolean, lookAt: Vec3 | undefined,
 ): PlayerInput {
   const skill = SKILL[brain.difficulty];
@@ -158,7 +159,7 @@ function finish(
   }
   // Never wander over the centerline: steer back if close.
   const sign = teamSign(p.team);
-  const depth = p.pos.x * sign;
+  const depth = sideDepth(state, p.team, p.pos.x, p.pos.z);
   if (depth < 1.2 && wish.x * sign < 0) wish = v3(0, 0, wish.z);
   if (depth < 0.8) wish = v3(sign, 0, wish.z);
   const f = viewDir(brain.yaw, 0);
@@ -229,12 +230,11 @@ function pickTarget(state: GameState, p: Player, brain: BotBrain): Player | unde
 }
 
 function nearestFreeBall(state: GameState, p: Player): Ball | undefined {
-  const sign = teamSign(p.team);
   let best: Ball | undefined;
   let bestD = Infinity;
   for (const b of state.balls) {
     if (b.state !== 'rest' && b.state !== 'dead') continue;
-    if (b.pos.x * sign < -0.9) continue; // out of reach on the other side
+    if (sideDepth(state, p.team, b.pos.x, b.pos.z) < -0.9) continue; // out of reach on the other side
     if (Math.abs(b.pos.z) > state.arena.bounds.maxZ - 0.5) continue;
     const d = distXZ(b.pos, p.pos);
     // Prefer balls nobody else on our team is closer to.

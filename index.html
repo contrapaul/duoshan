@@ -15,9 +15,13 @@
       <h1>DUOSHAN <span>躲闪</span></h1>
       <p class="sub">Elite Dodgeball · tech demo (offline practice vs bots)</p>
       <div class="opts">
+        <label>Arena <select id="opt-arena">
+          <option value="arena.classic_gym">Classic Gym</option>
+          <option value="arena.offset_court">Offset Court (test): stepped line, walls</option>
+        </select></label>
         <label>Match <select id="opt-teamSize">
           <option value="3">3v3 (bots fill to 6)</option>
-          <option value="5">5v5</option>
+          <option value="5" selected>5v5</option>
           <option value="8">8v8 stress test</option>
         </select></label>
         <label>Bots <select id="opt-difficulty">

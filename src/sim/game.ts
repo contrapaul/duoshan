@@ -5,7 +5,7 @@
  * a Durable Object, locally for practice, and headless in tests. Rules follow
  * PROJECT_PLAN.md §4–§5 (Classic).
  */
-import { CLASSIC_GYM, type ArenaDef, type Box } from './arena';
+import { CLASSIC_GYM, centerlineX, type ArenaDef, type Box } from './arena';
 import {
   add, angleBetween, clamp, closestOnSegment, copy, dist, distXZ, dot, lenXZ, lerp, len, norm, reflect,
   rightDir, scale, sub, v3, viewDir, type Vec3,
@@ -103,11 +103,16 @@ export function resetRound(state: GameState): void {
   const hw = state.arena.court.halfWidth - 0.5;
   state.balls = state.ballTypes.map((type, i) => ({
     id: i, type,
-    pos: v3(0, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
+    pos: ballSpawn(state.arena, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
     vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [],
   }));
   state.firstKoThisRound = false;
   state.outCounter = 0;
+}
+
+/** Balls start on the centerline. */
+function ballSpawn(arena: ArenaDef, r: number, z: number): Vec3 {
+  return v3(centerlineX(arena, z), r, z);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +149,11 @@ export function shieldUp(state: GameState, p: Player): boolean {
 
 /** Opponents are on the other half of the court; the centerline sign for a team. */
 export const teamSign = (team: Team): number => (team === 0 ? -1 : 1);
+
+/** How far a point is inside a team's own half (negative = over the centerline). */
+export function sideDepth(state: GameState, team: Team, x: number, z: number): number {
+  return (x - centerlineX(state.arena, z)) * teamSign(team);
+}
 
 export function aliveCount(state: GameState, team: Team): number {
   return state.players.filter((p) => p.team === team && (p.life !== 'out' || p.reviveT > 0)).length;
@@ -229,7 +239,8 @@ function updateTarget(state: GameState): void {
     state.targetTimer -= DT;
     if (state.targetTimer <= 0) {
       state.targetTimer = SLOWMO.targetEvery;
-      state.target = { pos: v3(0, 4 + nextFloat(state.rng) * 2, (nextFloat(state.rng) - 0.5) * 6), vz: 1.2, t: SLOWMO.targetUp };
+      const z = (nextFloat(state.rng) - 0.5) * 6;
+      state.target = { pos: v3(centerlineX(state.arena, z), 4 + nextFloat(state.rng) * 2, z), vz: 1.2, t: SLOWMO.targetUp };
       state.events.push({ t: 'target_spawn' });
     }
     return;
@@ -237,6 +248,7 @@ function updateTarget(state: GameState): void {
   tg.t -= DT;
   tg.pos.z += tg.vz * state.dt;
   if (Math.abs(tg.pos.z) > 3.5) tg.vz = -Math.sign(tg.pos.z) * Math.abs(tg.vz);
+  tg.pos.x = centerlineX(state.arena, tg.pos.z); // stays over the centerline
   if (tg.t <= 0) {
     state.target = null;
     state.events.push({ t: 'target_gone' });
@@ -446,7 +458,7 @@ function collidePlayers(state: GameState): void {
 function checkCenterline(state: GameState): void {
   for (const p of state.players) {
     if (p.life === 'out') continue;
-    if (p.pos.x * teamSign(p.team) < 0) knockOut(state, p, -1, -1, 'line', copy(p.pos), v3());
+    if (sideDepth(state, p.team, p.pos.x, p.pos.z) < 0) knockOut(state, p, -1, -1, 'line', copy(p.pos), v3());
   }
 }
 
