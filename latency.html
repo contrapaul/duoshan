@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DuoShan Latency Test</title>
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="stylesheet" href="/src/app/latency.css" />
+</head>
+<body>
+  <main>
+    <h1>DuoShan · Network test</h1>
+    <p class="lead">
+      Connects to a real DuoShan game room on Cloudflare: 16 bots playing at 60 Hz, sending game updates like a real 8v8 match.
+      It measures how fast and how steady your connection is. Run it at school and at home, at different times of day.
+    </p>
+    <div class="controls">
+      <label>Room location
+        <select id="hint">
+          <option value="apac" selected>Asia-Pacific (default for Shenzhen)</option>
+          <option value="auto">Automatic (Cloudflare decides)</option>
+          <option value="wnam">US West</option>
+          <option value="weur">Western Europe</option>
+          <option value="enam">US East</option>
+        </select>
+      </label>
+      <label>Length
+        <select id="duration">
+          <option value="30">30 seconds</option>
+          <option value="60" selected>60 seconds</option>
+        </select>
+      </label>
+      <button id="run">Run test</button>
+      <button id="runAll" class="secondary">Full test (3 locations, 30 s each)</button>
+    </div>
+
+    <section id="live" class="hidden">
+      <div class="where" id="where"></div>
+      <canvas id="chart" width="900" height="160"></canvas>
+      <div class="grid" id="stats"></div>
+      <div id="verdict"></div>
+    </section>
+
+    <section id="results" class="hidden">
+      <h2>Results</h2>
+      <pre id="report"></pre>
+      <button id="copy">Copy results</button>
+      <span id="copied"></span>
+    </section>
+    <p class="back"><a href="/">← Back to the tech demo</a></p>
+  </main>
+  <script type="module" src="/src/app/latency.ts"></script>
+</body>
+</html>

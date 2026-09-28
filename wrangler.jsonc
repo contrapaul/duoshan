@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The static game is served from dist/ at the edge. `/api/*` and `/rt/*` run
+  // the Worker (worker/index.ts). `/rt/probe` is the Phase 0 latency probe: a
+  // Durable Object that runs the real simulation with 16 bots. Same shape as
+  // Tome of Secrets (Workers + static assets), so the Durable Object classes
+  // live in this one Worker. No D1 yet; accounts arrive in Phase 4.
+  "name": "duoshan",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/api/*", "/rt/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "PROBE", "class_name": "ProbeRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProbeRoom"] }],
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "duoshan.contrapaul.com", "custom_domain": true }]
+}

@@ -1,7 +1,7 @@
 # Duǒshǎn 躲闪 — Elite Dodgeball
 ## Detailed Project Plan
 
-> **Status:** Draft v0.3, 2026-09-28. v0.3 removes voice chat, confirms `duoshan.contrapaul.com`, and explains cost units and bandwidth (§13.9).
+> **Status:** Draft v0.4, 2026-09-28. **Phase 0 tech demo built** (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
 > Draft v0.2, 2026-09-26. Built from `plans.md`.
 > **v0.2 changes (owner answers):**
 > - The architecture is now serverless Cloudflare (Workers, D1, Durable Objects), matching the owner's other projects. There are no dedicated game servers.
@@ -198,7 +198,7 @@ Every ball carries a **state** that the server tracks and the client shows visua
 2. A live ball goes **dead** when it touches the floor, a wall, the ceiling, an obstacle, or an out-of-bounds volume.
 3. A live ball that hits a player (knocking them out) **stays live** until it touches the environment. It can knock out a second player, which is a *double knockout*.
 4. A ball deflected by a **block** stays live. If it then knocks out an *opposing* player, that's a **bounce-out**.
-5. **Friendly fire:** live balls pass off teammates harmlessly. They bounce physically but cause no knockout.
+5. **Friendly fire:** live balls pass *through* teammates harmlessly, so teammates never block your throws. This was changed in the tech demo; physically bouncing off teammates felt like being blocked by your own side.
 6. **Headshots** count as knockouts **[DECISION]**. Many school rules disallow them. §17 has this as an open question.
 7. **Saves** (real-dodgeball rule: a teammate catches a ball that has just hit you, before it goes dead, and cancels your knockout) are **not in v1** **[DECISION]**. They're a candidate for a later update.
 
@@ -732,7 +732,7 @@ The key architectural bet is that **`src/sim` is pure**: `step(state, inputs, dt
   - Players in Shenzhen therefore play on an Asia-Pacific room, while a group in Europe gets a European room.
   - Quick Play prefers rooms in the player's own region.
 - **Limits to design around** ◆ (verify current Cloudflare limits during Phase 0):
-  - A DO is single-threaded. 16 players with 12 balls on custom physics is well under 1 ms per tick. That's a reason for custom physics over WASM here.
+  - A DO is single-threaded. **Measured in the tech demo:** the referee plus 16 bots averages **0.075 ms per tick** (p99 0.47 ms) on a laptop-class CPU, under 1% of the 16.7 ms budget. That's a reason for custom physics over WASM here.
   - DO memory is 128 MB, which is ample.
   - WebSocket messages per second per DO are fine at 16 × 30 Hz.
 
@@ -954,6 +954,21 @@ export const speedBall: BallDef = {
 - **Spike S4, netcode feel:** predicted movement plus a DO-authoritative ball throw at 150 ms of simulated latency.
 
 **Exit criteria:** 60 fps on the M1 Air, a Local Host decision from the §13.10 table, a stable DO tick (p99 < 4 ms of CPU), and cost per room-hour confirmed.
+
+**Phase 0 status (2026-09-28): tech demo built.** See `README.md` for running and deploying it.
+
+| Item | Status | Result |
+|---|---|---|
+| Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
+| Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, possession clock, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
+| **S1** performance on an M1 MacBook Air | ⏳ **Owner to run** | Open the demo, choose "8v8 stress test", and read the fps line at bottom-left. Download size: 150 KB gzip for the menu, plus 1.7 MB for physics loaded on Play. |
+| **S2** latency from Shenzhen | ⏳ **Owner to run** after `npm run deploy` | `/latency.html` → Full test. Verified locally: 30 updates/s, ~8.7 KB/s down, ~1.1 KB/s up, 60 room ticks/s. |
+| **S3** referee loop in a Durable Object | ✅ Locally / ⏳ on Cloudflare | `npm run bench`: 8v8 averages 0.075 ms per tick. In `wrangler dev`, the DO holds 60 ticks/s with a worst timer gap of ~25 ms. The Cloudflare numbers come from the same latency page. Rapier-in-DO wasn't needed. |
+| **S4** netcode feel at 150 ms | ⏭ Moved to Phase 2 | It needs the prediction layer. The binary snapshot codec (~300 bytes at 8v8) is already built and tested. |
+
+**Tuning notes from building it:**
+- Bots need the ballistic aim solver (`aimAt`). Straight-line aim misses badly at 10 m+.
+- Catching is timing-sensitive, as intended. A press about 0.2 s before arrival catches, and one pressed on release whiffs (both covered by tests).
 
 #### Phase 1: "Feel" Prototype, offline (Weeks 3–7)
 **Goal:** the core verbs are fun in single player against bots.
