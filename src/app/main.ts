@@ -20,11 +20,20 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 interface Settings { arena: string; teamSize: number; difficulty: Difficulty; quality: Quality; balls: string; slowmo: string; sensitivity: number }
 
-function readSettings(): Settings {
+/** Put the last-used settings back into the menu. Only on page load, never on Play. */
+function restoreSettings(): void {
   let saved: Partial<Settings> = {};
   try { saved = JSON.parse(localStorage.getItem('duoshan.settings') ?? '{}') as Partial<Settings>; } catch { /* private mode */ }
+  for (const [k, v] of Object.entries(saved)) {
+    const el = document.getElementById(`opt-${k}`) as HTMLSelectElement | HTMLInputElement | null;
+    // Ignore saved values the menu no longer offers (e.g. a removed option).
+    if (el && (!(el instanceof HTMLSelectElement) || [...el.options].some((o) => o.value === String(v)))) el.value = String(v);
+  }
+}
+
+/** What the menu shows right now. */
+function readSettings(): Settings {
   const get = (id: string) => ($(id) as HTMLSelectElement | HTMLInputElement);
-  for (const [k, v] of Object.entries(saved)) { const el = document.getElementById(`opt-${k}`) as HTMLInputElement | null; if (el) el.value = String(v); }
   return {
     arena: get('opt-arena').value,
     teamSize: Number(get('opt-teamSize').value),
@@ -156,7 +165,7 @@ function showMenu(): void {
   $('menu').classList.remove('hidden');
 }
 
-readSettings();
+restoreSettings();
 $('play').onclick = () => void start();
 $('quit').onclick = () => { running?.stop(); running = undefined; showMenu(); };
 window.addEventListener('keydown', (e) => {
