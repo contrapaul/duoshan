@@ -454,16 +454,33 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 
 ### 7.5 Offset Court (test arena, built 2026-09-28)
 A testing ground for **non-straight centerlines and cover** before Hypergym (§7.2). It's playable now from the menu.
-- **Hall:** the same as Classic Gym, with an 18 × 9 m court.
-- **Stepped centerline:** for z > 1.5 the line sits at x = +1.5, so Blue's half reaches 1.5 m into Red's side. For z < −1.5 it sits at x = −1.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
+- **Hall:** a larger hall of 42 × 26 m, with a **30 × 15 m court** (Classic Gym is 18 × 9 m). It was enlarged after playtest feedback.
+- **Stepped centerline:** for z > 2.5 the line sits at x = +2.5, so Blue's half reaches 2.5 m into Red's side. For z < −2.5 it sits at x = −2.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
 - **Balance by rotation:** every feature on one side has a twin rotated 180° about the court centre. It's "mirrored and flipped", not left-right mirrored.
-- **Walls:** three pairs of chest-high (1.1 m) padded walls:
+- **Walls:** five pairs of chest-high (1.1 m) padded walls:
   - a midfield wall running along the court
   - a wall across the court facing the other team's tongue
   - short cover at the base of each team's own tongue
+  - back-court cover
+  - centre-left cover
   - Balls bounce off them, players can't pass through or step onto them, and ragdolls land on them.
 - **Engine support added for it:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
-- **Known limitation:** bots don't path around walls yet. They slide along them, and their throws can hit walls. Wall-aware bots come with the Hypergym work.
+- **Bots:** they steer along walls instead of running into them, and never sprint at one. They still don't plan full paths around cover or check line of sight before throwing.
+
+**Fixed: wall flipping and trip loops (found in playtest, both arenas).**
+- **Symptom:** players and bots near walls flipped violently, and someone who got up against a wall kept tripping again and again.
+- **Causes and fixes:**
+  1. Any fast wall contact counted as "sprinting into a wall", and there was no recovery window. Now only a real sprint trips, and getting up gives **2 s of trip immunity**.
+  2. Bots ran straight at walls. They now steer along them.
+  3. Ragdolls could start partly inside a wall and got shoved out violently. They now start at least 0.55 m clear of walls.
+  4. Ragdoll part masses were wildly unequal: hands about 300× lighter than the torso. That made the joint solver unstable, so limbs whipped and spun. Parts now have realistic masses, hands and feet are welded to their limbs, and the solver runs more iterations.
+  5. The pull that keeps a tripped ragdoll with its player could build up speed. It's now capped.
+  6. Hard speed and spin caps apply to every ragdoll part (12 m/s, 14 rad/s).
+- **Result:**
+  - Bot trip loops dropped from 25 per 3 minutes to 0.
+  - Bot wall trips dropped from 55 to about 1.
+  - In the browser, 1.5 s after a fall every body is at rest (below 0.6 m/s).
+  - Regression tests guard the trip loop and wall clearance.
 
 ---
 
@@ -1290,7 +1307,8 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Sidestep dash | ~2.5 m over 0.2 s, cooldown 0.8 s, 0.4 s stamina |
 | Trip duration | 1.2–2.0 s + 0.6 s get-up |
 | Collision trip threshold | 6 m/s relative speed |
-| Wall trip threshold | ≥ 6 m/s, within 30° of the wall normal |
+| Wall trip threshold | a real sprint (not dash, slide or shove) at ≥ 6 m/s, within 30° of the wall normal |
+| Trip immunity after getting up | 2 s |
 | **Ball handling** | |
 | Pickup range / time | 1.6 m / 0.15 s |
 | Throw wind-up (Std/Spd/Hvy) | 0.25 / 0.25 / 0.65 s |

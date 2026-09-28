@@ -31,6 +31,8 @@ export const PLAYER = {
   getUpTime: 0.6,
   tripSpeedThreshold: 6.0,
   wallTripAngleDeg: 30,
+  /** After getting up you can't be tripped again for this long (no trip loops against walls or crowds). */
+  tripImmunity: 2.0,
   /** Sidestep dash (A/D + Space): ~2.5 m over 0.2 s. Speed eases out, so peak = 2.5 / (0.2 × 0.75). */
   dashTime: 0.2,
   dashSpeed: 16.7,

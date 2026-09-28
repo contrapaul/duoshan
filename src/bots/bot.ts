@@ -9,7 +9,7 @@ import { centerlineX } from '../sim/arena';
 import { eyePos, findPickup, sideDepth, teamSign } from '../sim/game';
 import { angleDiff, clamp, dist, distXZ, dot, len, norm, rightDir, sub, v3, viewDir, type Vec3 } from '../sim/math';
 import { nextFloat, nextGauss, type Rng } from '../sim/rng';
-import { BALLS, GRAVITY } from '../sim/tuning';
+import { BALLS, GRAVITY, PLAYER } from '../sim/tuning';
 import type { Ball, GameState, Player, PlayerInput } from '../sim/types';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -162,6 +162,9 @@ function finish(
   const depth = sideDepth(state, p.team, p.pos.x, p.pos.z);
   if (depth < 1.2 && wish.x * sign < 0) wish = v3(0, 0, wish.z);
   if (depth < 0.8) wish = v3(sign, 0, wish.z);
+  // Steer along walls instead of running into them, and never sprint at one.
+  const avoided = avoidWalls(state, p, wish);
+  if (avoided) { wish = avoided; sprint = false; }
   const f = viewDir(brain.yaw, 0);
   const r = rightDir(brain.yaw);
   brain.primary = primary;
@@ -174,6 +177,27 @@ function finish(
     sprint: sprint && dot(wish, f) > 0.3,
     crouch, jump, primary, secondary, use: false,
   };
+}
+
+/** If moving along `wish` would run into a wall within ~1 m, return a direction sliding along it. */
+function avoidWalls(state: GameState, p: Player, wish: Vec3): Vec3 | undefined {
+  if (Math.hypot(wish.x, wish.z) < 0.1) return undefined;
+  const probe = 1.0;
+  const px = p.pos.x + wish.x * probe;
+  const pz = p.pos.z + wish.z * probe;
+  const pad = PLAYER.radius + 0.15;
+  for (const b of state.arena.boxes) {
+    if (b.max.y - p.pos.y <= 0.35 || b.min.y > p.pos.y + 1.5) continue; // step-up height or overhead
+    if (px < b.min.x - pad || px > b.max.x + pad || pz < b.min.z - pad || pz > b.max.z + pad) continue;
+    const cx = clamp(p.pos.x, b.min.x, b.max.x);
+    const cz = clamp(p.pos.z, b.min.z, b.max.z);
+    let n = norm(v3(p.pos.x - cx, 0, p.pos.z - cz));
+    if (n.x === 0 && n.z === 0) n = norm(v3(-wish.x, 0, -wish.z));
+    let t = v3(-n.z, 0, n.x);
+    if (dot(t, wish) < 0) t = v3(n.z, 0, -n.x);
+    return t;
+  }
+  return undefined;
 }
 
 function turnToward(from: number, to: number, rate: number): number {

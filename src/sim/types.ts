@@ -54,6 +54,7 @@ export interface Player {
   staminaIdle: number; // seconds since stamina was last used
   life: Life;
   tripT: number; // remaining trip + get-up time
+  tripImmuneT: number; // > 0: can't be tripped (just got up)
   outOrder: number; // for first-out-first-in revives
   reviveT: number; // > 0: waiting to re-enter
   protectT: number; // spawn protection

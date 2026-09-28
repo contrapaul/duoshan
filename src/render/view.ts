@@ -259,7 +259,7 @@ export class GameView {
     if (me.life === 'out') {
       // Spectate from above your own half.
       const s = me.team === 0 ? -1 : 1;
-      this.camera.position.set(s * 13, 7.5, 0);
+      this.camera.position.set(s * (state.arena.bounds.maxX - 1), 7.5 + state.arena.court.halfWidth * 0.3, 0);
       this.camera.lookAt(0, 0.5, 0);
       return;
     }

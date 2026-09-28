@@ -42,6 +42,37 @@ export function centerlineX(arena: ArenaDef, z: number): number {
   return pts[pts.length - 1]!.x;
 }
 
+/**
+ * Nudge an (x, z) point so it is at least `clearance` from every box taller than
+ * `minHeight` (e.g. to spawn a ragdoll clear of walls instead of inside them).
+ */
+export function pushClear(arena: ArenaDef, x: number, z: number, clearance: number, minHeight = 0.3): { x: number; z: number } {
+  for (let pass = 0; pass < 3; pass++) {
+    for (const b of arena.boxes) {
+      if (b.max.y < minHeight) continue;
+      const cx = Math.min(Math.max(x, b.min.x), b.max.x);
+      const cz = Math.min(Math.max(z, b.min.z), b.max.z);
+      const dx = x - cx;
+      const dz = z - cz;
+      const d = Math.hypot(dx, dz);
+      if (d >= clearance) continue;
+      if (d > 1e-9) {
+        x = cx + (dx / d) * clearance;
+        z = cz + (dz / d) * clearance;
+      } else {
+        // Inside the footprint: leave by the nearest face.
+        const out = [
+          { d: x - b.min.x, x: b.min.x - clearance, z }, { d: b.max.x - x, x: b.max.x + clearance, z },
+          { d: z - b.min.z, x, z: b.min.z - clearance }, { d: b.max.z - z, x, z: b.max.z + clearance },
+        ].sort((a, c) => a.d - c.d)[0]!;
+        x = out.x;
+        z = out.z;
+      }
+    }
+  }
+  return { x, z };
+}
+
 const box = (kind: Box['kind'], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): Box => ({
   kind,
   min: { x: x0, y: y0, z: z0 },
@@ -71,10 +102,10 @@ export const CLASSIC_GYM: ArenaDef = {
 };
 
 /**
- * Offset Court (test arena, PROJECT_PLAN.md §7.5): the Classic Gym hall with a
- * stepped centerline and chest-high walls. Balanced by 180° rotation about the
- * court centre: every feature on Blue's side has a rotated twin on Red's, so
- * each team gets a 1.5 m "tongue" into the other half and equal area.
+ * Offset Court (test arena, PROJECT_PLAN.md §7.5): a larger hall with a stepped
+ * centerline and chest-high walls. Balanced by 180° rotation about the court
+ * centre: every feature on Blue's side has a rotated twin on Red's, so each team
+ * gets a 2.5 m "tongue" into the other half and exactly equal area.
  */
 const WALL_H = 1.1;
 const wallPair = (cx: number, cz: number, sx: number, sz: number): Box[] => [
@@ -82,21 +113,39 @@ const wallPair = (cx: number, cz: number, sx: number, sz: number): Box[] => [
   box('obstacle', -cx - sx / 2, 0, -cz - sz / 2, -cx + sx / 2, WALL_H, -cz + sz / 2),
 ];
 
+/** Outer walls, bleachers along one side, and a low stage at each end. */
+function hall(hx: number, hz: number, height: number): Box[] {
+  return [
+    box('wall', -hx - 1, 0, -hz - 1, -hx, height, hz + 1),
+    box('wall', hx, 0, -hz - 1, hx + 1, height, hz + 1),
+    box('wall', -hx - 1, 0, -hz - 1, hx + 1, height, -hz),
+    box('wall', -hx - 1, 0, hz, hx + 1, height, hz + 1),
+    box('bleacher', -hx + 5, 0, hz - 1.6, hx - 5, 0.5, hz),
+    box('bleacher', -hx + 5, 0.5, hz - 1.0, hx - 5, 1.0, hz),
+    box('bleacher', -hx + 5, 1.0, hz - 0.5, hx - 5, 1.5, hz),
+    box('stage', -hx, 0, -5, -hx + 1.5, 0.9, 5),
+    box('stage', hx - 1.5, 0, -5, hx, 0.9, 5),
+  ];
+}
+
 export const OFFSET_COURT: ArenaDef = {
   id: 'arena.offset_court',
   name: 'Offset Court (test)',
-  court: CLASSIC_GYM.court,
-  bounds: CLASSIC_GYM.bounds,
+  // 30 × 15 m court (Classic is 18 × 9) inside a 42 × 26 m hall.
+  court: { halfLength: 15, halfWidth: 7.5 },
+  bounds: { minX: -21, maxX: 21, minZ: -13, maxZ: 13, height: 10 },
   centerline: [
-    { z: -1.5, x: -1.5 }, // z < -1.5: Red's tongue reaches 1.5 m into Blue's half
-    { z: 1.5, x: 1.5 }, //  z > 1.5: Blue's tongue reaches 1.5 m into Red's half
+    { z: -2.5, x: -2.5 }, // z < -2.5: Red's tongue reaches 2.5 m into Blue's half
+    { z: 2.5, x: 2.5 }, //  z > 2.5: Blue's tongue reaches 2.5 m into Red's half
   ],
   boxes: [
-    ...CLASSIC_GYM.boxes,
+    ...hall(21, 13, 10),
     // Blue-side walls (the second of each pair is Red's rotated twin).
-    ...wallPair(-5.5, 2.0, 0.3, 2.2), // midfield cover, runs along the court
-    ...wallPair(-3.0, -2.6, 2.0, 0.3), // across the court, facing Red's tongue
-    ...wallPair(-1.2, 3.6, 0.3, 1.4), // cover at the base of Blue's tongue
+    ...wallPair(-9, 3.5, 0.3, 3.0), // midfield cover, runs along the court
+    ...wallPair(-5, -4.5, 3.0, 0.3), // across the court, facing Red's tongue
+    ...wallPair(-1.5, 5.5, 0.3, 2.0), // cover at the base of Blue's tongue
+    ...wallPair(-12, -2, 0.3, 2.5), // back-court cover
+    ...wallPair(-6.5, 0.5, 2.0, 0.3), // centre-left cover
   ],
 };
 

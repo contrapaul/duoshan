@@ -138,9 +138,10 @@ export function buildGym(scene: THREE.Scene, arena: ArenaDef, quality: Quality):
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.position.set(-6, 14, 5);
   sun.castShadow = quality === 'high';
-  sun.shadow.mapSize.set(2048, 2048);
   const cam = sun.shadow.camera;
-  cam.left = -15; cam.right = 15; cam.top = 10; cam.bottom = -10; cam.near = 1; cam.far = 40;
+  // Shadow frustum covers the whole hall, whatever its size.
+  cam.left = minX - 1; cam.right = maxX + 1; cam.top = maxZ + 1; cam.bottom = minZ - 1; cam.near = 1; cam.far = 60;
+  sun.shadow.mapSize.set(maxX - minX > 30 ? 4096 : 2048, maxX - minX > 30 ? 4096 : 2048);
   sun.shadow.bias = -0.0005;
   scene.add(sun);
 }

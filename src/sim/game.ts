@@ -56,7 +56,7 @@ export function createGame(opts: GameOptions): GameState {
       onGround: true, crouching: false, sprinting: false,
       slideT: 0, slideCooldown: 0,
       stamina: PLAYER.staminaMax, staminaIdle: 0,
-      life: 'active', tripT: 0, outOrder: 0, reviveT: 0, protectT: 0,
+      life: 'active', tripT: 0, tripImmuneT: 0, outOrder: 0, reviveT: 0, protectT: 0,
       held: -1, heldT: 0,
       action: { kind: 'none' }, catchCooldown: 0, dashCooldown: 0,
       forceT: 0, forceDur: 0, forceVel: v3(),
@@ -93,7 +93,7 @@ export function resetRound(state: GameState): void {
     p.yaw = p.team === 0 ? 0 : Math.PI;
     p.pitch = 0;
     p.life = 'active';
-    p.tripT = 0; p.reviveT = 0; p.protectT = 0; p.outOrder = 0;
+    p.tripT = 0; p.tripImmuneT = 0; p.reviveT = 0; p.protectT = 0; p.outOrder = 0;
     p.held = -1; p.heldT = 0; p.action = { kind: 'none' };
     p.slideT = 0; p.slideCooldown = 0; p.stamina = PLAYER.staminaMax;
     p.dashCooldown = 0; p.forceT = 0;
@@ -268,6 +268,7 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
   p.slideCooldown = Math.max(0, p.slideCooldown - DT);
   p.dashCooldown = Math.max(0, p.dashCooldown - DT);
   p.protectT = Math.max(0, p.protectT - DT);
+  p.tripImmuneT = Math.max(0, p.tripImmuneT - DT);
   const horizSpeed = lenXZ(p.vel);
   const blocking = p.action.kind === 'block';
 
@@ -281,6 +282,7 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
     if (p.tripT <= 0) {
       p.life = 'active';
       p.vel = v3();
+      p.tripImmuneT = PLAYER.tripImmunity;
       state.events.push({ t: 'getup', player: p.id });
     }
   } else if (p.forceT > 0) {
@@ -413,8 +415,9 @@ function collidePlayerWorld(state: GameState, p: Player, prevY: number): void {
       p.vel.x += nx * into;
       p.vel.z += nz * into;
     }
-    // Sprinting head-on into a wall trips you (§4.2).
-    if (p.life === 'active' && speed >= PLAYER.tripSpeedThreshold * 0.95 &&
+    // Sprinting head-on into a wall trips you (§4.2). Only a real sprint counts, not a
+    // dash, slide or shove, so brushing past cover never flips anyone.
+    if (p.life === 'active' && p.sprinting && p.forceT <= 0 && speed >= PLAYER.tripSpeedThreshold &&
         into >= speed * Math.cos((PLAYER.wallTripAngleDeg * Math.PI) / 180)) {
       trip(state, p, 'wall', v3(nx * 2, 1.5, nz * 2));
     }
@@ -606,7 +609,7 @@ function dropBall(p: Player, ball: Ball): void {
 }
 
 function trip(state: GameState, p: Player, cause: 'wall' | 'collision' | 'heavy' | 'speedball', impulse: Vec3): void {
-  if (p.life !== 'active' || p.protectT > 0) return;
+  if (p.life !== 'active' || p.protectT > 0 || p.tripImmuneT > 0) return;
   p.life = 'tripped';
   p.tripT = PLAYER.tripTime + PLAYER.getUpTime;
   p.slideT = 0;
