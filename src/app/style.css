@@ -1,0 +1,53 @@
+:root {
+  --mate: #3a86ff;
+  --foe: #ff2d2d;
+  --ink: #f5f5f5;
+  --panel: rgba(12, 16, 24, 0.88);
+  --accent: #ffdd33;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0c1018; color: var(--ink); }
+canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+.hidden { display: none !important; }
+.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); z-index: 10; padding: 16px; }
+.panel { background: var(--panel); border: 1px solid #2c3444; border-radius: 12px; padding: 28px 32px; max-width: 640px; width: 100%; text-align: center; }
+h1 { margin: 0; font-size: 44px; letter-spacing: 3px; color: var(--accent); }
+h1 span { color: var(--ink); font-weight: 400; }
+.sub { margin: 6px 0 20px; opacity: 0.75; }
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; text-align: left; margin-bottom: 20px; }
+.opts label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; opacity: 0.9; }
+select, input[type=range] { font: inherit; padding: 6px; border-radius: 6px; border: 1px solid #3a4456; background: #1a2130; color: var(--ink); }
+button { font: inherit; font-weight: 700; font-size: 18px; letter-spacing: 2px; padding: 12px 40px; border: 0; border-radius: 8px; background: var(--accent); color: #111; cursor: pointer; margin: 4px; }
+button.secondary { background: #3a4456; color: var(--ink); }
+.controls { margin-top: 18px; font-size: 13px; line-height: 1.7; opacity: 0.8; }
+.links a { color: var(--accent); }
+@media (max-width: 560px) { .opts { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; text-shadow: 0 1px 3px #000; }
+#score { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 26px; font-weight: 800; text-align: center; }
+#score small { display: block; font-size: 12px; font-weight: 400; opacity: 0.8; }
+.mate { color: var(--mate); }
+.foe { color: var(--foe); }
+#alive { position: absolute; top: 18px; left: 16px; display: flex; flex-direction: column; gap: 6px; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; background: currentColor; }
+.dot.out { opacity: 0.2; }
+#banner { position: absolute; top: 28%; width: 100%; text-align: center; font-size: 64px; font-weight: 900; color: var(--accent); }
+#banner.small { font-size: 22px; font-weight: 600; color: var(--ink); top: 18%; }
+#flash { position: absolute; top: 58%; width: 100%; text-align: center; font-size: 30px; font-weight: 900; color: #fff; }
+#feed { position: absolute; top: 14px; right: 16px; text-align: right; font-size: 14px; line-height: 1.6; }
+#feed i { font-style: normal; color: var(--accent); font-size: 11px; font-weight: 800; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; border: 2px solid #fff; }
+#crosshair.catching { width: 44px; height: 44px; margin: -22px 0 0 -22px; border-color: #7cff7c; }
+#crosshair.blocking { width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 4px; border-color: #7cd3ff; }
+#charge { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+  background: conic-gradient(var(--accent) var(--p, 0%), transparent 0); -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px); mask: radial-gradient(circle, transparent 22px, #000 23px); }
+#bottom { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); text-align: center; width: 320px; }
+#held { font-weight: 800; letter-spacing: 1px; margin-bottom: 6px; font-size: 14px; opacity: 0.9; }
+#held.ball-standard { color: #ff5a5a; } #held.ball-speed { color: #ff9a3c; } #held.ball-heavy { color: #6f95ff; }
+#held.warn { animation: blink 0.25s infinite alternate; }
+@keyframes blink { to { opacity: 0.2; } }
+.bar { height: 6px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
+#stamina { height: 100%; background: #7cff7c; }
+#perf { position: absolute; bottom: 8px; left: 10px; font: 12px ui-monospace, monospace; opacity: 0.75; }
+#help { position: absolute; bottom: 70px; right: 16px; max-width: 360px; background: var(--panel); padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; text-shadow: none; }
