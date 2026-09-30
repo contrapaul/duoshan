@@ -60,7 +60,7 @@ export function createGame(opts: GameOptions): GameState {
       held: -1, heldT: 0,
       action: { kind: 'none' }, catchCooldown: 0, dashCooldown: 0,
       forceT: 0, forceDur: 0, forceVel: v3(),
-      prevPrimary: false, prevUse: false, prevJump: false,
+      prevPrimary: false, prevUse: false, useShield: false, prevJump: false,
       kos: 0, catches: 0, blocks: 0, coins: 0, score: 0,
     });
   }
@@ -476,10 +476,15 @@ function updateActions(state: GameState, p: Player, input: PlayerInput): void {
   // E picks up or catches, like left click with empty hands (§4.3).
   const usePressed = input.use && !p.prevUse;
 
-  // Block stance lasts exactly as long as RMB is held with a ball (§4.3.3).
-  if (input.secondary && p.held >= 0 && (p.action.kind === 'none' || p.action.kind === 'aim')) {
+  // E pressed while already holding a ball raises the shield for as long as E is held.
+  // (Holding E through a pickup doesn't: the press was used to pick the ball up.)
+  if (usePressed && p.held >= 0) p.useShield = true;
+  if (!input.use || p.held < 0) p.useShield = false;
+  const shieldHeld = input.secondary || p.useShield;
+  // Block stance lasts exactly as long as RMB (or E) is held with a ball (§4.3.3).
+  if (shieldHeld && p.held >= 0 && (p.action.kind === 'none' || p.action.kind === 'aim')) {
     p.action = { kind: 'block', t: 0 };
-  } else if (!input.secondary && p.action.kind === 'block') {
+  } else if (!shieldHeld && p.action.kind === 'block') {
     p.action = { kind: 'none' };
   }
 

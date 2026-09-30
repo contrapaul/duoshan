@@ -207,6 +207,8 @@ export interface PoseInput {
   windup: number;
   /** Seated in the bleachers (knocked out, spectating). */
   sitting?: boolean;
+  /** Sprinting: lean forward and drop the hips a little. */
+  sprinting?: boolean;
 }
 
 /** Procedural pose. Cheap, readable, and good enough for the prototype. */
@@ -216,8 +218,8 @@ export function pose(c: Character, p: PoseInput): void {
   c.throwAnim = Math.max(0, c.throwAnim - p.dt);
   const k = Math.min(1, p.speed / 4.5);
   const s = Math.sin(c.walkPhase);
-  let pelvisY = 0.95;
-  let lean = -0.08 * k;
+  let pelvisY = p.sprinting ? 0.9 : 0.95;
+  let lean = p.sprinting ? -0.3 : -0.08 * k;
   let thighR = s * 0.75 * k;
   let thighL = -s * 0.75 * k;
   let shinR = -Math.max(0, -Math.cos(c.walkPhase)) * 1.0 * k - 0.05;

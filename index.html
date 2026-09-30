@@ -48,8 +48,8 @@
       <button id="play">PLAY</button>
       <div class="controls">
         <b>WASD</b> move · <b>Shift</b> sprint · <b>Space</b> jump · <b>A/D + Space</b> sidestep dash · <b>C</b> crouch (sprint + C = slide)<br />
-        <b>Left click</b> or <b>E</b>: pick up / catch · <b>Left click</b> with a ball: throw (hold up to 1.2 s to aim)<br />
-        <b>Hold right click</b> with a ball: raise it as a shield<br />
+        <b>Left click</b> or <b>E</b>: pick up / catch · <b>Left click</b> or <b>Q</b> with a ball: throw (hold up to 1.2 s to aim)<br />
+        <b>Hold right click</b> or <b>hold E</b> with a ball: raise it as a shield<br />
         <b>V</b> first/third person · <b>Tab</b> scoreboard · <b>H</b> help · <b>Esc</b> pause
       </div>
       <p class="links"><a href="/latency.html">Network latency test →</a></p>
@@ -81,12 +81,14 @@
       <div class="bar"><div id="stamina"></div></div>
     </div>
     <div id="perf"></div>
+    <div id="hurt"></div>
+    <div id="recover" class="hidden"><div id="recoverText">Getting up…</div><div class="bar"><div id="recoverFill"></div></div></div>
     <div id="scoreboard" class="hidden"></div>
     <div id="help" class="hidden">
       <b>Rules</b><br />
       Hit an opponent with a <i>live</i> ball (not yet bounced) to knock them out.<br />
       Catch a live ball to knock out the thrower <i>and</i> bring back a teammate.<br />
-      Holding a ball lets you block (hold right click to raise it as a shield); empty hands let you catch (click or E).<br />
+      Holding a ball lets you block (hold right click or E to raise it as a shield); empty hands let you catch (click or E). Q throws too.<br />
       A target appears every 90 s: hit it for 12 s of slow motion and 100 Dodgecoins.<br />
       Glowing balls are live. Heavy (blue) balls can't be caught, and they knock a shield out of your hands. Speed (orange) balls still trip after bouncing.<br />
       Cross the yellow centerline and you're out.

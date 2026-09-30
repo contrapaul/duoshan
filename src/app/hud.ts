@@ -25,10 +25,18 @@ const FEED_HOLD = 5;
 const FEED_OUT = 0.6;
 const FEED_MAX = 5;
 
+const TRIP_TEXT: Record<string, string> = {
+  wall: 'TRIPPED! Ran into the wall',
+  collision: 'TRIPPED! Collision',
+  heavy: 'TRIPPED! Over a heavy ball',
+  speedball: 'KNOCKED DOWN! Speed ball',
+};
+
 export class Hud {
   private feed: { text: string; t: number }[] = [];
   showScoreboard = false;
   private flash = { text: '', t: 0 };
+  private hurt = 0;
   private banner = { text: '', t: 0 };
 
   constructor(private local: number) {}
@@ -66,6 +74,13 @@ export class Hud {
       // "Dodge" only when a live ball passes close and misses you (§4.9), never for a missed catch.
       if (e.t === 'dodge' && e.player === this.local) this.showFlash('Dodge');
       if (e.t === 'revive' && e.player === this.local) this.showFlash('BACK IN!');
+      // Took a hit: say what happened and pulse a red vignette (§4.9).
+      if (e.t === 'trip' && e.player === this.local) {
+        this.showFlash(TRIP_TEXT[e.cause] ?? 'TRIPPED!');
+        this.hurt = 0.6;
+      }
+      if (e.t === 'ko' && e.player === this.local) this.hurt = 0.8;
+      if (e.t === 'block' && e.broke && e.player === this.local) this.hurt = 0.4;
       if (e.t === 'possession_drop' && e.player === this.local) this.showFlash('Too slow! Ball dropped');
       if (e.t === 'round_start') this.showBanner('DODGE!', 1.2);
       if (e.t === 'round_end') this.showBanner(`${e.winner === state.players[this.local]!.team ? 'Your team' : 'Other team'} wins the round`, 3);
@@ -111,6 +126,17 @@ export class Hud {
       return `<div style="opacity:${o.toFixed(2)}">${x.text}</div>`;
     }).join('');
     this.drawScoreboard(state);
+
+    // Hit vignette, and a recovery bar while you're down.
+    this.hurt = Math.max(0, this.hurt - dt);
+    $('hurt').style.opacity = String(Math.min(1, this.hurt * 2));
+    const down = me.life === 'tripped';
+    $('recover').classList.toggle('hidden', !down);
+    if (down) {
+      const total = PLAYER.tripTime + PLAYER.getUpTime;
+      $('recoverFill').style.width = `${Math.round((1 - me.tripT / total) * 100)}%`;
+      $('recoverText').textContent = me.tripT > PLAYER.getUpTime ? 'Down! Getting up…' : 'Getting up…';
+    }
 
     // Stamina + held ball + aim charge.
     $('stamina').style.width = `${(me.stamina / PLAYER.staminaMax) * 100}%`;

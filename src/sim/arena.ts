@@ -146,18 +146,13 @@ function hall(hx: number, hz: number, height: number): Box[] {
 
 /**
  * Full Court (PROJECT_PLAN.md §7.5): the default arena. A basketball-sized court
- * (30 × 18 m, NBA is 28.7 × 15.2) with a stepped centerline: each team gets a
- * 2.5 m "tongue" into the other half, balanced by 180° rotation (equal area).
+ * (30 × 18 m, NBA is 28.7 × 15.2) with a classic straight centerline.
  */
 export const FULL_COURT: ArenaDef = {
   id: 'arena.offset_court',
   name: 'Full Court',
   court: { halfLength: 15, halfWidth: 9 },
   bounds: { minX: -21, maxX: 21, minZ: -14, maxZ: 14, height: 10 },
-  centerline: [
-    { z: -2.5, x: -2.5 }, // z < -2.5: Red's tongue reaches 2.5 m into Blue's half
-    { z: 2.5, x: 2.5 }, //  z > 2.5: Blue's tongue reaches 2.5 m into Red's half
-  ],
   basketballLines: true,
   boxes: hall(21, 14, 10),
 };

@@ -115,7 +115,9 @@ All units are metres, seconds, and kilograms. Values marked ◆ are tuning start
 | Crouch / duck | C (hold) | **Not Ctrl.** Ctrl+W closes the browser tab and can't be intercepted outside fullscreen Keyboard Lock. |
 | Slide | Crouch while sprinting | |
 | Pick up / Catch / Throw | Left mouse | Context-sensitive (§4.3) |
-| Pick up / Catch | E | Same as left mouse with empty hands. Does nothing while holding a ball. |
+| Throw (second button) | Q | Same as left mouse. Makes trackpad play easier. |
+| Pick up / Catch | E | Same as left mouse with empty hands. |
+| Shield (hold) | E held with a ball | Same as holding right mouse: raises the ball as a shield. It only works if E is pressed *after* you have the ball, so holding E through a pickup doesn't raise it. |
 | Block stance | Right mouse (**hold**) | Requires a ball. Holds it out in front as a physical shield (§4.3.3). Trackpad: two-finger click and hold. |
 | Toggle 1st/3rd person | V | Disabled in Classic FPV |
 | Text chat | Enter (all) / Y (team) | Accounts only; guests see a sign-up prompt |
@@ -252,7 +254,12 @@ A per-hit random seed adds variety. The server sends the seed so every client sh
   - **Carrying:** the ball in the right hand, lower right.
   - **Block stance:** the ball pushed out in both hands, lower centre, partly covering the view. It's a real shield, so it should feel like one.
   - **Wind-up and throw:** the right arm draws back out of view while the left hand points at the target, then follows through.
-  - The camera follows the head during slides and knockdowns, with a comfort option to reduce camera roll.
+  - **The camera is locked to the head (built 2026-09-30):**
+    - Sprinting leans the body forward, and the camera drops about 10 cm and moves forward with the head. There's a light running bob.
+    - When you trip, the camera locks to your falling ragdoll's head, rolling with it. It then eases back to eye height over 0.4 s as you get up.
+    - Third person follows the head in the same way.
+  - **Trip feedback:** a flash saying what happened ("TRIPPED! Ran into the wall", "KNOCKED DOWN! Speed ball", and so on), a jolt, a red hit vignette, and a **"Getting up…" progress bar** until you can move again.
+  - A comfort option to reduce camera roll comes later.
 - **Team outlines:** in Classic, teammates get a blue outline and opponents a bright red one. Ultimate has no team outlines **[DECISION]**; opponents get a subtle neutral outline for readability.
 - **Accessibility:** outline colours can be changed. The defaults avoid relying only on red/green. Blue and red are distinguishable for most colour-vision deficiencies. An optional pattern or icon overhead marks the team.
 
@@ -461,9 +468,9 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 ### 7.5 Full Court (default arena, 2026-09-30; previously "Offset Court")
 The **default arena**, sized like a basketball court. An NBA court is 28.7 × 15.2 m.
 - **Hall:** 42 × 28 m, with a **30 × 18 m court**. It was widened from 30 × 15 m and has no obstacles, per playtest feedback.
+- **Centerline:** a **classic straight line** (owner decision, 2026-09-30). The stepped line below is kept as engine support for Hypergym and is tested with a test-only arena.
 - **Floor markings:** faint basketball markings (centre circle, keys, free-throw circles, three-point arcs) sit under the brighter dodgeball lines. They're decoration only.
-- **Stepped centerline:** for z > 2.5 the line sits at x = +2.5, so Blue's half reaches 2.5 m into Red's side. For z < −2.5 it sits at x = −2.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
-- **Balance:** by 180° rotation about the court centre.
+- **Stepped centerline (previous version):** for z > 2.5 the line sits at x = +2.5, so Blue's half reaches 2.5 m into Red's side. For z < −2.5 it sits at x = −2.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
 - **Bleachers:** along one side, used for spectating (§9.4).
 - **Engine support:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
 - **Earlier version:** an "Offset Court" with ten chest-high walls tested cover. Its walls were removed after playtesting. Bots still steer along walls, which the Hypergym work will need.

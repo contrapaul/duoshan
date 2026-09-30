@@ -19,7 +19,7 @@ export interface PlayerInput {
   primary: boolean;
   /** Right mouse, held: block stance. */
   secondary: boolean;
-  /** E: pick up / catch (same as primary with empty hands). */
+  /** E: pick up / catch with empty hands; hold with a ball to raise it as a shield. */
   use: boolean;
 }
 
@@ -69,6 +69,8 @@ export interface Player {
   forceVel: Vec3;
   prevPrimary: boolean;
   prevUse: boolean;
+  /** E was pressed while already holding a ball: holding E keeps the shield up. */
+  useShield: boolean;
   prevJump: boolean;
   /** Dodgecoins earned this session (target hits). */
   coins: number;

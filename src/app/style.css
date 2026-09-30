@@ -71,3 +71,8 @@ body.slowmo #hud::before { content: ''; position: absolute; inset: 0; background
 #scoreboard tr.dim td { opacity: 0.45; }
 #scoreboard tr.me td { color: var(--accent); }
 #scoreboard td { white-space: nowrap; }
+/* Took a hit: red vignette pulse; recovering: progress bar (§4.9). */
+#hurt { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 0, 0, 0.55)); }
+#recover { position: absolute; top: 67%; left: 50%; transform: translateX(-50%); width: 260px; text-align: center; font-weight: 800; letter-spacing: 1px; }
+#recover .bar { height: 8px; margin-top: 6px; }
+#recoverFill { height: 100%; width: 0; background: var(--accent); }

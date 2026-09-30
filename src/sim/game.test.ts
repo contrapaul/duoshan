@@ -471,3 +471,50 @@ describe('bounce ball', () => {
     expect(states).toEqual(['live', 'live', 'dead']);
   });
 });
+
+describe('E shield', () => {
+  function duelE(): { s: GameState; a: GameState['players'][0]; b: GameState['players'][0] } {
+    const s = createGame({ seed: 11, teamSize: 1 });
+    live(s);
+    const [a, b] = s.players as [GameState['players'][0], GameState['players'][0]];
+    a.pos = v3(-5, 0, 0); a.yaw = 0;
+    b.pos = v3(5, 0, 0); b.yaw = Math.PI;
+    const ball = s.balls[0]!;
+    ball.state = 'held'; ball.holder = a.id; a.held = ball.id;
+    return { s, a, b };
+  }
+
+  it('holding E with a ball raises it as a shield that deflects throws', () => {
+    const { s, a, b } = duelE();
+    const shieldBall = s.balls[1]!;
+    shieldBall.state = 'held'; shieldBall.holder = b.id; b.held = shieldBall.id;
+    const { yaw, pitch } = aimAt(a, b, 18, 1);
+    const bPitch = aimAt(b, a, 18, 1).pitch - 0.08;
+    const events: SimEvent[] = [];
+    for (let t = 0; t < 200; t++) {
+      const inputs = idle(s);
+      inputs[0] = { ...NO_INPUT, yaw, pitch, primary: t < 72 };
+      // First tick is the press; holding E after that keeps the shield up.
+      inputs[1] = { ...NO_INPUT, yaw: Math.PI, pitch: bPitch, use: t >= 1 };
+      events.push(...step(s, inputs));
+    }
+    expect(events.some((e) => e.t === 'block')).toBe(true);
+    expect(b.life).toBe('active');
+  });
+
+  it('holding E through a pickup does not raise a shield until E is pressed again', () => {
+    const { s, b } = duelE();
+    const ball = s.balls[1]!;
+    ball.pos = v3(4.2, ball.pos.y, 0);
+    const kinds: string[] = [];
+    for (let t = 0; t < 40; t++) {
+      const inputs = idle(s);
+      inputs[1] = { ...NO_INPUT, yaw: Math.PI, pitch: 0, use: t < 30 || t > 32 };
+      step(s, inputs);
+      kinds.push(b.action.kind);
+    }
+    expect(b.held).toBe(ball.id);
+    expect(kinds.slice(12, 30)).not.toContain('block'); // still holding E from the pickup
+    expect(kinds.slice(34)).toContain('block'); // pressed again with the ball in hand
+  });
+});

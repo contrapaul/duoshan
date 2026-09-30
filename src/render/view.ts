@@ -47,6 +47,11 @@ export class GameView {
   private glows: THREE.Mesh[] = [];
   private fpArms: FpArms;
   private fpPhase = 0;
+  /** First-person camera follows the head (§4.6): sprint lean 0..1, trip head-lock blend 0..1. */
+  private camLean = 0;
+  private headLock = 0;
+  private lastHead = new THREE.Vector3();
+  private shakeT = 0;
   private target: THREE.Group;
   private ragdollWorld: RagdollWorld;
   thirdPerson = true;
@@ -129,6 +134,7 @@ export class GameView {
         this.ragdolls.set(e.player, { r, kind: e.t === 'ko' ? 'ko' : 'trip' });
       }
       if (e.t === 'throw') this.chars[e.player]!.throwAnim = 0.25;
+      if ((e.t === 'trip' || e.t === 'ko') && e.player === this.local) this.shakeT = 0.35;
     }
   }
 
@@ -150,7 +156,7 @@ export class GameView {
     const local = state.players[this.local]!;
     for (const p of state.players) this.drawPlayer(state, p, prev.players[p.id]!, alpha, dt, look);
     state.balls.forEach((b, i) => this.drawBall(b, prev.balls[i]!, alpha, state));
-    this.placeCamera(state, local, prev.players[local.id]!, alpha, look);
+    this.placeCamera(state, local, prev.players[local.id]!, alpha, look, dt);
     this.drawFpArms(state, local, dt);
     this.target.visible = !!state.target;
     if (state.target) {
@@ -192,7 +198,7 @@ export class GameView {
     const a = p.action;
     const held = p.held >= 0;
     pose(c, {
-      speed: Math.hypot(p.vel.x, p.vel.z), dt, pitch,
+      speed: Math.hypot(p.vel.x, p.vel.z), dt, pitch, sprinting: p.sprinting,
       crouching: p.crouching, sliding: p.slideT > 0, airborne: !p.onGround,
       holding: held, action: a.kind, actionT: 't' in a ? a.t : 0,
       windup: held ? BALLS[state.balls[p.held]!.type].windup : 0.25,
@@ -270,7 +276,7 @@ export class GameView {
     });
   }
 
-  private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }): void {
+  private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }, dt: number): void {
     if (me.life === 'out' && this.ragdolls.has(me.id)) {
       // Kill camera: third person, locked on your own flying ragdoll, whatever view you were in.
       const target = this.chars[me.id]!.meshes.pelvis.getWorldPosition(new THREE.Vector3());
@@ -289,9 +295,42 @@ export class GameView {
     const seat = me.life === 'out' ? this.seatFor(state, me) : undefined;
     const pos = seat ? { x: seat.x, y: seat.y, z: seat.z }
       : { x: lerp(prev.x, me.pos.x, alpha), y: lerp(prev.y, me.pos.y, alpha), z: lerp(prev.z, me.pos.z, alpha) };
-    const eye = seat ? v3(seat.x, seat.y + SEATED_EYE, seat.z) : eyePos({ ...me, pos });
+    let eye = seat ? v3(seat.x, seat.y + SEATED_EYE, seat.z) : eyePos({ ...me, pos });
     const f = viewDir(look.yaw, look.pitch);
     const r = rightDir(look.yaw);
+    let roll = 0;
+    if (!seat) {
+      // Sprinting leans you forward: the camera drops and moves ahead with the head.
+      const k = 1 - Math.exp(-10 * dt);
+      this.camLean += ((me.sprinting && me.life === 'active' ? 1 : 0) - this.camLean) * k;
+      const fl = viewDir(look.yaw, 0);
+      const speed = Math.hypot(me.vel.x, me.vel.z);
+      const bob = me.onGround && me.life === 'active' ? Math.abs(Math.sin(this.fpPhase)) * 0.035 * Math.min(1, speed / 4.5) : 0;
+      eye = v3(eye.x + fl.x * 0.15 * this.camLean, eye.y - 0.1 * this.camLean - bob, eye.z + fl.z * 0.15 * this.camLean);
+      // Tripped: the camera is locked to your falling head, then eases back up as you stand.
+      const rd = this.ragdolls.get(me.id);
+      if (me.life === 'tripped' && rd) {
+        const head = this.chars[me.id]!.meshes.head;
+        head.localToWorld(this.lastHead.set(0.08, -0.08, 0));
+        this.headLock = 1;
+        // Roll with the head as it tumbles.
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
+        roll = Math.max(-0.7, Math.min(0.7, -(up.x * r.x + up.z * r.z)));
+      } else {
+        this.headLock = Math.max(0, this.headLock - dt / 0.4);
+      }
+      if (this.headLock > 0) {
+        const t = this.headLock * this.headLock * (3 - 2 * this.headLock);
+        eye = v3(lerp(eye.x, this.lastHead.x, t), lerp(eye.y, this.lastHead.y, t), lerp(eye.z, this.lastHead.z, t));
+        roll *= t;
+      }
+      // A jolt when you take a hit or trip.
+      if (this.shakeT > 0) {
+        this.shakeT = Math.max(0, this.shakeT - dt);
+        const a = this.shakeT * 0.25;
+        eye = v3(eye.x + (Math.random() - 0.5) * a, eye.y + (Math.random() - 0.5) * a, eye.z + (Math.random() - 0.5) * a);
+      }
+    }
     if (this.thirdPerson) {
       const b = state.arena.bounds;
       const cam = new THREE.Vector3(eye.x - f.x * 3 + r.x * 0.6, eye.y - f.y * 3 + 0.3, eye.z - f.z * 3 + r.z * 0.6);
@@ -301,14 +340,13 @@ export class GameView {
       this.camera.position.copy(cam);
       this.camera.lookAt(eye.x + f.x * 20 + r.x * 0.6, eye.y + f.y * 20 + 0.3, eye.z + f.z * 20 + r.z * 0.6);
     } else {
-      const shake = me.life === 'tripped' ? 0.4 : 0;
       if (seat) {
         this.camera.position.set(eye.x, eye.y, eye.z);
         this.camera.rotation.set(look.pitch, look.yaw - Math.PI / 2, 0, 'YXZ');
         return;
       }
-      this.camera.position.set(eye.x, me.life === 'tripped' ? pos.y + 0.4 : eye.y, eye.z);
-      this.camera.rotation.set(look.pitch, look.yaw - Math.PI / 2, shake, 'YXZ');
+      this.camera.position.set(eye.x, eye.y, eye.z);
+      this.camera.rotation.set(look.pitch, look.yaw - Math.PI / 2, roll, 'YXZ');
     }
   }
 }

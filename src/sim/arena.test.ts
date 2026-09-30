@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { botInputs, createBrain, type BotBrain } from '../bots/bot';
-import { ARENAS, CLASSIC_GYM, centerlineX, FULL_COURT, pushClear, spectatorSeats } from './arena';
+import { ARENAS, CLASSIC_GYM, centerlineX, FULL_COURT, pushClear, spectatorSeats, type ArenaDef } from './arena';
 import { createGame, step } from './game';
 import { v3 } from './math';
 import { NO_INPUT, type GameState, type PlayerInput } from './types';
+
+/** A stepped-centerline arena, to keep the polyline engine tested (Hypergym will use it). */
+const STEPPED: ArenaDef = {
+  ...FULL_COURT,
+  id: 'test.stepped',
+  centerline: [{ z: -2.5, x: -2.5 }, { z: 2.5, x: 2.5 }],
+};
 
 const idle = (s: GameState): PlayerInput[] => s.players.map((p) => ({ ...NO_INPUT, yaw: p.yaw, pitch: p.pitch }));
 
@@ -15,25 +22,31 @@ describe('Full Court', () => {
     expect(FULL_COURT.boxes.some((b) => b.kind === 'obstacle')).toBe(false);
   });
 
-  it('has a stepped centerline: each team gets a 2.5 m tongue into the other half', () => {
-    expect(centerlineX(FULL_COURT, 4)).toBeCloseTo(2.5);
-    expect(centerlineX(FULL_COURT, -4)).toBeCloseTo(-2.5);
-    expect(centerlineX(FULL_COURT, 0)).toBeCloseTo(0);
+  it('has a classic straight centerline', () => {
+    for (const z of [-8, -3, 0, 3, 8]) expect(centerlineX(FULL_COURT, z)).toBe(0);
+  });
+});
+
+describe('stepped centerlines (engine support)', () => {
+  it('follow the polyline: each team gets a 2.5 m tongue into the other half', () => {
+    expect(centerlineX(STEPPED, 4)).toBeCloseTo(2.5);
+    expect(centerlineX(STEPPED, -4)).toBeCloseTo(-2.5);
+    expect(centerlineX(STEPPED, 0)).toBeCloseTo(0);
   });
 
-  it('is balanced: both teams get the same court area', () => {
-    const { halfLength: L, halfWidth: W } = FULL_COURT.court;
+  it('are balanced when rotationally symmetric: both teams get the same court area', () => {
+    const { halfLength: L, halfWidth: W } = STEPPED.court;
     let blue = 0;
     const n = 9000;
     for (let i = 0; i < n; i++) {
       const z = -W + ((i + 0.5) / n) * 2 * W;
-      blue += (centerlineX(FULL_COURT, z) + L) * ((2 * W) / n);
+      blue += (centerlineX(STEPPED, z) + L) * ((2 * W) / n);
     }
     expect(blue).toBeCloseTo(2 * L * W, 3);
   });
 
   it('knocks out by the stepped line, not by x = 0', () => {
-    const s = createGame({ seed: 1, teamSize: 1, arena: FULL_COURT });
+    const s = createGame({ seed: 1, teamSize: 1, arena: STEPPED });
     while (s.phase !== 'play') step(s, idle(s));
     const blue = s.players[0]!;
     blue.pos = v3(2.0, 0, 5); // inside Blue's tongue: legal
@@ -44,8 +57,8 @@ describe('Full Court', () => {
     expect(blue.life).toBe('out');
   });
 
-  it('starts balls on the centerline and outside walls', () => {
-    for (const arena of ARENAS) {
+  it('start balls on the centerline and outside walls', () => {
+    for (const arena of [...ARENAS, STEPPED]) {
       const s = createGame({ seed: 1, teamSize: 5, arena });
       for (const b of s.balls) {
         expect(b.pos.x).toBeCloseTo(centerlineX(arena, b.pos.z));

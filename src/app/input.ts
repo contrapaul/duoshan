@@ -53,9 +53,10 @@ export class LocalInput {
       yaw: this.yaw,
       pitch: this.pitch,
       sprint: k('ShiftLeft') || k('ShiftRight'),
-      crouch: k('KeyC') || k('KeyQ'),
+      crouch: k('KeyC'),
       jump: k('Space'),
-      primary: this.buttons.has(0),
+      // Q is a second throw button (acts exactly like left click), for trackpad players.
+      primary: this.buttons.has(0) || k('KeyQ'),
       secondary: this.buttons.has(2),
       use: k('KeyE'),
     };
