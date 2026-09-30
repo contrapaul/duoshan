@@ -16,8 +16,8 @@
       <p class="sub">Elite Dodgeball · tech demo (offline practice vs bots)</p>
       <div class="opts">
         <label>Arena <select id="opt-arena">
-          <option value="arena.classic_gym">Classic Gym</option>
-          <option value="arena.offset_court">Offset Court (test): stepped line, walls</option>
+          <option value="arena.offset_court" selected>Full Court: basketball size, stepped line</option>
+          <option value="arena.classic_gym">Classic Gym (small)</option>
         </select></label>
         <label>Match <select id="opt-teamSize">
           <option value="3">3v3 (bots fill to 6)</option>
@@ -30,9 +30,10 @@
           <option value="hard">Hard</option>
         </select></label>
         <label>Balls <select id="opt-balls">
-          <option value="mixed">Mixed (standard, speed, heavy)</option>
+          <option value="mixed">Mixed (standard, speed, heavy, bounce)</option>
           <option value="standard">Standard only</option>
           <option value="chaos">Speed + Heavy chaos</option>
+          <option value="bounce">Bounce balls only (test)</option>
         </select></label>
         <label>Slow motion <select id="opt-slowmo">
           <option value="events">Events only (headshots, target)</option>

@@ -99,6 +99,8 @@ export interface Ball {
   /** Near misses in progress: closest distance so far to each nearby opponent, and who has already dodged it. */
   near: { id: number; d: number }[];
   dodged: number[];
+  /** Environment bounces survived while live (bounce ball). */
+  bounces: number;
 }
 
 export type SimEvent =

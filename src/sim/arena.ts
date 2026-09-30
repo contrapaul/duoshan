@@ -27,6 +27,8 @@ export interface ArenaDef {
    * ends. Blue (team 0) must stay at x < line, Red at x > line. Omitted: x = 0.
    */
   centerline?: { z: number; x: number }[];
+  /** Decorative basketball markings under the dodgeball lines (render only). */
+  basketballLines?: boolean;
 }
 
 /** x of the centerline at a given z (§5.1). */
@@ -73,6 +75,32 @@ export function pushClear(arena: ArenaDef, x: number, z: number, clearance: numb
   return { x, z };
 }
 
+export interface Seat { x: number; y: number; z: number; yaw: number }
+
+/**
+ * Spectator seats on the bleachers (§9.4), for one team's half of the hall:
+ * Blue sits on the x < 0 end, Red on x > 0. Top rows first (best view), then
+ * nearest the middle. `y` is the seat surface; `yaw` faces the court.
+ */
+export function spectatorSeats(arena: ArenaDef, team: 0 | 1): Seat[] {
+  const rows = arena.boxes.filter((b) => b.kind === 'bleacher').sort((a, b) => b.max.y - a.max.y);
+  const seats: Seat[] = [];
+  for (const row of rows) {
+    // The exposed strip of this step: up to where the next higher step starts.
+    const higher = rows.filter((r) => r.max.y > row.max.y);
+    const back = higher.length ? Math.min(...higher.map((r) => (row.min.z < 0 ? r.max.z : r.min.z))) : row.min.z < 0 ? row.min.z : row.max.z;
+    const z = row.min.z < 0 ? (row.max.z + back) / 2 : (row.min.z + back) / 2;
+    const yaw = z > 0 ? Math.PI / 2 : -Math.PI / 2;
+    const rowSeats: Seat[] = [];
+    for (let x = row.min.x + 0.8; x <= row.max.x - 0.8; x += 1.1) {
+      if ((team === 0) === x < 0) rowSeats.push({ x, y: row.max.y, z, yaw });
+    }
+    rowSeats.sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
+    seats.push(...rowSeats);
+  }
+  return seats;
+}
+
 const box = (kind: Box['kind'], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): Box => ({
   kind,
   min: { x: x0, y: y0, z: z0 },
@@ -101,18 +129,6 @@ export const CLASSIC_GYM: ArenaDef = {
   ],
 };
 
-/**
- * Offset Court (test arena, PROJECT_PLAN.md §7.5): a larger hall with a stepped
- * centerline and chest-high walls. Balanced by 180° rotation about the court
- * centre: every feature on Blue's side has a rotated twin on Red's, so each team
- * gets a 2.5 m "tongue" into the other half and exactly equal area.
- */
-const WALL_H = 1.1;
-const wallPair = (cx: number, cz: number, sx: number, sz: number): Box[] => [
-  box('obstacle', cx - sx / 2, 0, cz - sz / 2, cx + sx / 2, WALL_H, cz + sz / 2),
-  box('obstacle', -cx - sx / 2, 0, -cz - sz / 2, -cx + sx / 2, WALL_H, -cz + sz / 2),
-];
-
 /** Outer walls, bleachers along one side, and a low stage at each end. */
 function hall(hx: number, hz: number, height: number): Box[] {
   return [
@@ -128,25 +144,22 @@ function hall(hx: number, hz: number, height: number): Box[] {
   ];
 }
 
-export const OFFSET_COURT: ArenaDef = {
+/**
+ * Full Court (PROJECT_PLAN.md §7.5): the default arena. A basketball-sized court
+ * (30 × 18 m, NBA is 28.7 × 15.2) with a stepped centerline: each team gets a
+ * 2.5 m "tongue" into the other half, balanced by 180° rotation (equal area).
+ */
+export const FULL_COURT: ArenaDef = {
   id: 'arena.offset_court',
-  name: 'Offset Court (test)',
-  // 30 × 15 m court (Classic is 18 × 9) inside a 42 × 26 m hall.
-  court: { halfLength: 15, halfWidth: 7.5 },
-  bounds: { minX: -21, maxX: 21, minZ: -13, maxZ: 13, height: 10 },
+  name: 'Full Court',
+  court: { halfLength: 15, halfWidth: 9 },
+  bounds: { minX: -21, maxX: 21, minZ: -14, maxZ: 14, height: 10 },
   centerline: [
     { z: -2.5, x: -2.5 }, // z < -2.5: Red's tongue reaches 2.5 m into Blue's half
     { z: 2.5, x: 2.5 }, //  z > 2.5: Blue's tongue reaches 2.5 m into Red's half
   ],
-  boxes: [
-    ...hall(21, 13, 10),
-    // Blue-side walls (the second of each pair is Red's rotated twin).
-    ...wallPair(-9, 3.5, 0.3, 3.0), // midfield cover, runs along the court
-    ...wallPair(-5, -4.5, 3.0, 0.3), // across the court, facing Red's tongue
-    ...wallPair(-1.5, 5.5, 0.3, 2.0), // cover at the base of Blue's tongue
-    ...wallPair(-12, -2, 0.3, 2.5), // back-court cover
-    ...wallPair(-6.5, 0.5, 2.0, 0.3), // centre-left cover
-  ],
+  basketballLines: true,
+  boxes: hall(21, 14, 10),
 };
 
-export const ARENAS: ArenaDef[] = [CLASSIC_GYM, OFFSET_COURT];
+export const ARENAS: ArenaDef[] = [FULL_COURT, CLASSIC_GYM];

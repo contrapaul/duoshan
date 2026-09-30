@@ -227,6 +227,12 @@ Every ball carries a **state** that the server tracks and the client shows visua
 | After-bounce effect | Harmless | While speed > 12 m/s: leg hit on a sprinting/jumping player causes a **trip**. Body hit on a stable player causes a **push** of about 0.5 m. Head hit causes a **knockdown** (trip, not KO). Below 12 m/s: harmless. | Harmless, but a resting heavy ball **trips** players who run, sprint, or slide over it |
 | Other | — | Aimed throws are faster and more accurate. Unaimed throws are less accurate. | Knocks Neighborhood inflatables around (§7.3) |
 
+**Bounce ball (lime green, test ball, built 2026-09-30):**
+- Standard size, very bouncy (restitution 0.85), thrown at 17 m/s, catchable and blockable.
+- It **stays live through two floor or wall bounces**, so it can still knock a player out after bouncing. The third bounce, or rolling along the floor, makes it dead.
+- A knockout after at least one bounce is a **BANK SHOT**: +50 points and a tag in the feed.
+- One is in the default ball mix, and the menu has a "Bounce balls only" test option.
+
 **Heavy ball hit-zone reactions (cosmetic):**
 - Head: flip up and over.
 - Upper body: twirl.
@@ -452,20 +458,15 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - Players spawn at spread-out pads. Balls spawn at pads that refill in rotation.
 - Sponsor billboards on buildings are prime banner slots (§12).
 
-### 7.5 Offset Court (test arena, built 2026-09-28)
-A testing ground for **non-straight centerlines and cover** before Hypergym (§7.2). It's playable now from the menu.
-- **Hall:** a larger hall of 42 × 26 m, with a **30 × 15 m court** (Classic Gym is 18 × 9 m). It was enlarged after playtest feedback.
+### 7.5 Full Court (default arena, 2026-09-30; previously "Offset Court")
+The **default arena**, sized like a basketball court. An NBA court is 28.7 × 15.2 m.
+- **Hall:** 42 × 28 m, with a **30 × 18 m court**. It was widened from 30 × 15 m and has no obstacles, per playtest feedback.
+- **Floor markings:** faint basketball markings (centre circle, keys, free-throw circles, three-point arcs) sit under the brighter dodgeball lines. They're decoration only.
 - **Stepped centerline:** for z > 2.5 the line sits at x = +2.5, so Blue's half reaches 2.5 m into Red's side. For z < −2.5 it sits at x = −2.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
-- **Balance by rotation:** every feature on one side has a twin rotated 180° about the court centre. It's "mirrored and flipped", not left-right mirrored.
-- **Walls:** five pairs of chest-high (1.1 m) padded walls:
-  - a midfield wall running along the court
-  - a wall across the court facing the other team's tongue
-  - short cover at the base of each team's own tongue
-  - back-court cover
-  - centre-left cover
-  - Balls bounce off them, players can't pass through or step onto them, and ragdolls land on them.
-- **Engine support added for it:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
-- **Bots:** they steer along walls instead of running into them, and never sprint at one. They still don't plan full paths around cover or check line of sight before throwing.
+- **Balance:** by 180° rotation about the court centre.
+- **Bleachers:** along one side, used for spectating (§9.4).
+- **Engine support:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
+- **Earlier version:** an "Offset Court" with ten chest-high walls tested cover. Its walls were removed after playtesting. Bots still steer along walls, which the Hypergym work will need.
 
 **Fixed: wall flipping and trip loops (found in playtest, both arenas).**
 - **Symptom:** players and bots near walls flipped violently, and someone who got up against a wall kept tripping again and again.
@@ -540,6 +541,12 @@ A testing ground for **non-straight centerlines and cover** before Hypergym (§7
 - A **quick-chat wheel** of pre-written, safe messages ("Nice catch!", "Ball!", "Cover me") works for **everyone, including guests** **[DECISION]**. It improves teamwork without moderation risk.
 
 ### 9.4 Spectating
+- **Bleachers (built 2026-09-30):**
+  - After the kill camera (your ragdoll lies there for 3 s), a knocked-out player **appears seated in the bleachers**. Blue sits on the Blue end and Red on the Red end, both facing the court.
+  - Other players see you sitting there.
+  - You **can't move, only look around**, in first or third person (V toggles).
+  - Your view starts facing the court.
+  - When a teammate's catch brings you back, you return to the court as normal.
 
 *(Voice chat was removed in v0.3 by owner decision. The quick-chat wheel and text chat cover communication.)*
 

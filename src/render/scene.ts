@@ -49,6 +49,34 @@ function courtTexture(arena: ArenaDef): THREE.CanvasTexture {
   for (const x of [-L / 3, L / 3]) {
     g.beginPath(); g.moveTo(X(x), Z(-W)); g.lineTo(X(x), Z(W)); g.stroke();
   }
+  if (arena.basketballLines) {
+    // Faint basketball markings (decoration only): centre circle, keys, free-throw
+    // circles and three-point arcs, under the brighter dodgeball lines.
+    g.save();
+    g.strokeStyle = 'rgba(255,255,255,0.4)';
+    g.lineWidth = 3;
+    const circle = (x: number, z: number, r: number, a0 = 0, a1 = Math.PI * 2) => {
+      g.beginPath(); g.arc(X(x), Z(z), r * ppm, a0, a1); g.stroke();
+    };
+    circle(0, 0, 1.8);
+    for (const s of [-1, 1]) {
+      const base = s * L;
+      const hoop = s * (L - 1.6);
+      g.strokeRect(Math.min(X(base), X(base - s * 5.8)), Z(-2.45), 5.8 * ppm, 4.9 * ppm); // the key
+      circle(base - s * 5.8, 0, 1.8); // free-throw circle
+      // Three-point line: straight along the sides, then an arc around the hoop.
+      const r = 6.75;
+      const zc = Math.min(W - 0.9, r);
+      const dx = Math.sqrt(Math.max(0, r * r - zc * zc));
+      for (const z of [-zc, zc]) {
+        g.beginPath(); g.moveTo(X(base), Z(z)); g.lineTo(X(hoop - s * dx), Z(z)); g.stroke();
+      }
+      const a = Math.atan2(zc, dx);
+      if (s < 0) circle(hoop, 0, r, -a, a);
+      else circle(hoop, 0, r, Math.PI - a, Math.PI + a);
+    }
+    g.restore();
+  }
   // The centerline.
   g.strokeStyle = '#ffdd33';
   g.lineWidth = 10;

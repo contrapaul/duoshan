@@ -37,7 +37,7 @@ const BOT_NAMES = [
 
 export function defaultBallTypes(players: number): BallType[] {
   const n = players <= 6 ? 4 : players <= 10 ? 6 : 8;
-  const mix: BallType[] = ['standard', 'speed', 'standard', 'heavy', 'standard', 'speed', 'standard', 'standard'];
+  const mix: BallType[] = ['standard', 'speed', 'bounce', 'heavy', 'standard', 'speed', 'standard', 'bounce'];
   return mix.slice(0, n);
 }
 
@@ -104,7 +104,7 @@ export function resetRound(state: GameState): void {
   state.balls = state.ballTypes.map((type, i) => ({
     id: i, type,
     pos: ballSpawn(state.arena, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
-    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [],
+    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [], bounces: 0,
   }));
   state.firstKoThisRound = false;
   state.outCounter = 0;
@@ -588,6 +588,7 @@ function throwBall(state: GameState, p: Player, ball: Ball, charge: number): voi
   ball.hits = [];
   ball.near = [];
   ball.dodged = [];
+  ball.bounces = 0;
   ball.deflectedBy = -1;
   ball.flags = [...(p.slideT > 0 ? ['slide'] : []), ...(!p.onGround ? ['airborne'] : [])];
   p.held = -1;
@@ -639,6 +640,7 @@ function knockOut(
       // hits already includes this player, so a second entry means one throw took out two.
       if (ball.hits.length >= 2) special.push('double');
       if (ball.deflectedBy >= 0) special.push('bounce_out');
+      if (ball.bounces > 0) special.push('bank_shot');
     }
     if (!state.firstKoThisRound) special.push('first');
     // A catch is scored as a catch (below), not as a knockout.
@@ -762,7 +764,11 @@ function substepBall(state: GameState, ball: Ball, sdt: number): boolean {
 }
 
 function envTouch(state: GameState, ball: Ball, speed: number, surface: 'floor' | 'wall'): void {
-  if (ball.state === 'live') ball.state = 'dead';
+  if (ball.state === 'live') {
+    // A real bounce (not a roll) can be survived by balls with liveBounces (bounce ball: 2).
+    if (speed > 2 && ball.bounces < BALLS[ball.type].liveBounces) ball.bounces++;
+    else ball.state = 'dead';
+  }
   if (speed > 1) state.events.push({ t: 'bounce', ball: ball.id, speed, surface });
 }
 

@@ -205,6 +205,8 @@ export interface PoseInput {
   action: 'none' | 'pickup' | 'aim' | 'catch' | 'block';
   actionT: number;
   windup: number;
+  /** Seated in the bleachers (knocked out, spectating). */
+  sitting?: boolean;
 }
 
 /** Procedural pose. Cheap, readable, and good enough for the prototype. */
@@ -240,6 +242,14 @@ export function pose(c: Character, p: PoseInput): void {
   }
   if (p.airborne && !p.sliding) {
     thighR = 0.6; thighL = 0.2; shinR = -0.9; shinL = -0.5;
+  }
+  if (p.sitting) {
+    // Seated: thighs forward, shins down, forearms resting on the knees.
+    pelvisY = 0.55;
+    thighR = 1.5; thighL = 1.5;
+    shinR = -1.5; shinL = -1.5;
+    lean = -0.1;
+    armR = 0.45; armL = 0.45; foreR = 1.0; foreL = 1.0;
   }
   if (p.holding) { armR = 0.9; foreR = 0.9; }
   if (p.action === 'aim') {

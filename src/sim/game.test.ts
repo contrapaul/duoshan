@@ -424,3 +424,50 @@ describe('dodge', () => {
     expect(events.some((e) => e.t === 'dodge')).toBe(false);
   });
 });
+
+describe('bounce ball', () => {
+  function bankShot(type: 'bounce' | 'standard'): { s: GameState; events: SimEvent[] } {
+    const s = createGame({ seed: 12, teamSize: 1 });
+    live(s);
+    const [a, b] = s.players as [GameState['players'][0], GameState['players'][0]];
+    a.pos = v3(-5, 0, 0); b.pos = v3(5, 0, 0); b.yaw = Math.PI;
+    const ball = s.balls[0]!;
+    ball.type = type;
+    ball.state = 'held'; ball.holder = a.id; a.held = ball.id;
+    // Aim at the floor 2.5 m short of b, so the ball has to bounce to reach them.
+    const floorSpot = { ...b, pos: v3(2.5, 0.15 - 1.1, 0), vel: v3() };
+    const { yaw, pitch } = aimAt(a, floorSpot, 17, 1);
+    const events: SimEvent[] = [];
+    for (let t = 0; t < 200; t++) {
+      const inputs = idle(s);
+      inputs[0] = { ...NO_INPUT, yaw, pitch, primary: t < 72 };
+      events.push(...step(s, inputs));
+    }
+    return { s, events };
+  }
+
+  it('can still knock a player out after bouncing (a bank shot)', () => {
+    const { s, events } = bankShot('bounce');
+    const ko = events.find((e) => e.t === 'ko');
+    expect(s.players[1]!.life).toBe('out');
+    expect(ko && ko.t === 'ko' && ko.special).toContain('bank_shot');
+  });
+
+  it('the same throw with a standard ball is harmless after the bounce', () => {
+    const { s } = bankShot('standard');
+    expect(s.players[1]!.life).toBe('active');
+  });
+
+  it('stays live for two bounces and goes dead on the third', () => {
+    const s = createGame({ seed: 1, teamSize: 1 });
+    live(s);
+    for (const p of s.players) p.pos = v3(p.team === 0 ? -8 : 8, 0, 0);
+    const ball = s.balls[0]!;
+    Object.assign(ball, { type: 'bounce', state: 'live', pos: v3(0, 3, 4), vel: v3(0, -6, 0), thrower: 0, throwerTeam: 0, bounces: 0 });
+    const states: string[] = [];
+    for (let t = 0; t < 400 && states.length < 3; t++) {
+      for (const e of step(s, idle(s))) if (e.t === 'bounce' && e.surface === 'floor') states.push(ball.state);
+    }
+    expect(states).toEqual(['live', 'live', 'dead']);
+  });
+});

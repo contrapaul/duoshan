@@ -60,7 +60,7 @@ export const HANDLING = {
   dodgeMargin: 0.6,
 };
 
-export type BallType = 'standard' | 'speed' | 'heavy';
+export type BallType = 'standard' | 'speed' | 'heavy' | 'bounce';
 
 export interface BallDef {
   type: BallType;
@@ -84,6 +84,8 @@ export interface BallDef {
   koImpulse: number;
   /** After an environment bounce, above this speed the ball can still trip/push (speed ball only). */
   fastDeadMinSpeed: number;
+  /** Environment bounces a thrown ball survives while staying live (bounce ball: 2). */
+  liveBounces: number;
 }
 
 export const BALLS: Record<BallType, BallDef> = {
@@ -91,19 +93,26 @@ export const BALLS: Record<BallType, BallDef> = {
     type: 'standard', radius: 0.15, speedQuick: 18, speedAimed: 18, gravityScale: 1.0,
     restitution: 0.6, rollingDrag: 1.2, windup: 0.25, blockWindup: 0.1,
     spreadQuickDeg: 4.0, spreadAimedDeg: 1.2, catchable: true, breaksShield: false,
-    catchRadiusScale: 1, catchConeDeg: 35, koImpulse: 0, fastDeadMinSpeed: Infinity,
+    catchRadiusScale: 1, catchConeDeg: 35, koImpulse: 0, fastDeadMinSpeed: Infinity, liveBounces: 0,
   },
   speed: {
     type: 'speed', radius: 0.135, speedQuick: 25, speedAimed: 29, gravityScale: 0.8,
     restitution: 0.7, rollingDrag: 0.7, windup: 0.25, blockWindup: 0.1,
     spreadQuickDeg: 6.0, spreadAimedDeg: 0.6, catchable: true, breaksShield: false,
-    catchRadiusScale: 0.85, catchConeDeg: 30, koImpulse: 1, fastDeadMinSpeed: 12,
+    catchRadiusScale: 0.85, catchConeDeg: 30, koImpulse: 1, fastDeadMinSpeed: 12, liveBounces: 0,
   },
   heavy: {
     type: 'heavy', radius: 0.17, speedQuick: 13.5, speedAimed: 13.5, gravityScale: 1.6,
     restitution: 0.15, rollingDrag: 3.0, windup: 0.65, blockWindup: 0.25,
     spreadQuickDeg: 3.0, spreadAimedDeg: 1.5, catchable: false, breaksShield: true,
-    catchRadiusScale: 1, catchConeDeg: 35, koImpulse: 3, fastDeadMinSpeed: Infinity,
+    catchRadiusScale: 1, catchConeDeg: 35, koImpulse: 3, fastDeadMinSpeed: Infinity, liveBounces: 0,
+  },
+  // Lime green test ball: very bouncy, and stays live for two floor/wall bounces (bank shots).
+  bounce: {
+    type: 'bounce', radius: 0.15, speedQuick: 17, speedAimed: 17, gravityScale: 1.0,
+    restitution: 0.85, rollingDrag: 0.9, windup: 0.25, blockWindup: 0.1,
+    spreadQuickDeg: 4.0, spreadAimedDeg: 1.2, catchable: true, breaksShield: false,
+    catchRadiusScale: 1, catchConeDeg: 35, koImpulse: 1, fastDeadMinSpeed: Infinity, liveBounces: 2,
   },
 };
 
@@ -122,7 +131,7 @@ export const SCORE = {
   block: 50,
   roundWin: 100,
   matchWin: 300,
-  special: { first: 50, double: 100, bounce_out: 75, slide: 50, airborne: 50 } as Record<string, number>,
+  special: { first: 50, double: 100, bounce_out: 75, slide: 50, airborne: 50, bank_shot: 50 } as Record<string, number>,
 };
 
 /** Slow motion (PROJECT_PLAN.md §4.7). Durations are real seconds. */

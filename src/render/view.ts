@@ -3,8 +3,9 @@
  * game rules; everything it shows comes from the referee's state and events.
  */
 import * as THREE from 'three';
+import { spectatorSeats, type Seat } from '../sim/arena';
 import { eyePos } from '../sim/game';
-import { lerp, rightDir, viewDir } from '../sim/math';
+import { lerp, rightDir, v3, viewDir } from '../sim/math';
 import { BALLS } from '../sim/tuning';
 import type { Ball, GameState, Player, SimEvent } from '../sim/types';
 import { createCharacter, createFpArms, pose, poseFpArms, setOutline, type Character, type FpArms } from './character';
@@ -12,9 +13,12 @@ import type { Ragdoll, RagdollWorld } from './ragdoll';
 import { buildGym, createRenderer, type Quality } from './scene';
 
 // Balls keep their colour whatever their state; live (thrown) balls also glow in that colour (§4.4).
-const BALL_COLORS = { standard: 0xd62828, speed: 0xff7b00, heavy: 0x1d4ed8 } as const;
+const BALL_COLORS = { standard: 0xd62828, speed: 0xff7b00, heavy: 0x1d4ed8, bounce: 0x7ed321 } as const;
 const TEAMMATE = 0x3a86ff;
 const TRAIL_LEN = 10;
+/** Eye height above the seat surface when sitting. */
+const SEATED_EYE = 0.95;
+/** A knocked-out ragdoll lies there this long (the kill camera watches it), then the player moves to the bleachers. */
 const KILL_CAM_SECONDS = 3;
 const OPPONENT = 0xff2d2d;
 
@@ -47,8 +51,9 @@ export class GameView {
   private ragdollWorld: RagdollWorld;
   thirdPerson = true;
   /** Kill camera (§4.9): seconds left, and the view direction at the moment you were knocked out. */
-  private killCamT = 0;
   private killCamYaw = 0;
+  /** Bleacher seats per team for knocked-out players (§9.4). */
+  private seats: [Seat[], Seat[]];
   private local: number;
 
   private constructor(canvas: HTMLCanvasElement, state: GameState, local: number, quality: Quality, rw: RagdollWorld, scene: THREE.Scene) {
@@ -57,6 +62,7 @@ export class GameView {
     this.local = local;
     this.ragdollWorld = rw;
     buildGym(this.scene, state.arena, quality);
+    this.seats = [spectatorSeats(state.arena, 0), spectatorSeats(state.arena, 1)];
     const localTeam = state.players[local]?.team ?? 0;
     for (const p of state.players) {
       const c = createCharacter(p.id * 13 + 5, p.team === localTeam ? TEAMMATE : OPPONENT);
@@ -119,7 +125,7 @@ export class GameView {
         const imp = new THREE.Vector3(e.impulse.x, e.impulse.y, e.impulse.z);
         if (e.t === 'ko' && imp.lengthSq() > 0.01) imp.y += imp.length() * 0.6; // heavy balls flip people
         const r = this.ragdollWorld.spawn(c, vel, point, imp, e.seed);
-        if (e.t === 'ko' && e.player === this.local) { this.killCamT = KILL_CAM_SECONDS; this.killCamYaw = p.yaw; }
+        if (e.t === 'ko' && e.player === this.local) this.killCamYaw = p.yaw;
         this.ragdolls.set(e.player, { r, kind: e.t === 'ko' ? 'ko' : 'trip' });
       }
       if (e.t === 'throw') this.chars[e.player]!.throwAnim = 0.25;
@@ -132,7 +138,7 @@ export class GameView {
       if (rd.kind === 'trip') {
         if (p.life === 'tripped') this.ragdollWorld.pin(rd.r, p.pos.x, p.pos.z);
         else { this.ragdollWorld.remove(rd.r); this.ragdolls.delete(id); }
-      } else if (p.life !== 'out' || rd.r.age > 3.5) {
+      } else if (p.life !== 'out' || rd.r.age > KILL_CAM_SECONDS) {
         this.ragdollWorld.remove(rd.r);
         this.ragdolls.delete(id);
       }
@@ -144,7 +150,6 @@ export class GameView {
     const local = state.players[this.local]!;
     for (const p of state.players) this.drawPlayer(state, p, prev.players[p.id]!, alpha, dt, look);
     state.balls.forEach((b, i) => this.drawBall(b, prev.balls[i]!, alpha, state));
-    this.killCamT = local.life === 'out' ? Math.max(0, this.killCamT - dt) : 0;
     this.placeCamera(state, local, prev.players[local.id]!, alpha, look);
     this.drawFpArms(state, local, dt);
     this.target.visible = !!state.target;
@@ -161,7 +166,8 @@ export class GameView {
     const firstPersonSelf = p.id === this.local && !this.thirdPerson && p.life !== 'out';
     // Keep the throw animation clock running even when the body is hidden (first person).
     if (firstPersonSelf) c.throwAnim = Math.max(0, c.throwAnim - dt);
-    c.root.visible = !ragdolled && p.life !== 'out' && !firstPersonSelf;
+    const seat = p.life === 'out' && !ragdolled ? this.seatFor(state, p) : undefined;
+    c.root.visible = !ragdolled && (p.life !== 'out' || !!seat) && !firstPersonSelf && !(seat && p.id === this.local && !this.thirdPerson);
     if (ragdolled) {
       // Parts live in world space while ragdolled; hide them in first person for yourself.
       for (const m of Object.values(c.meshes)) m.visible = !(p.id === this.local && !this.thirdPerson && p.life === 'tripped');
@@ -169,6 +175,16 @@ export class GameView {
     }
     for (const m of Object.values(c.meshes)) m.visible = true;
     if (!c.root.visible) return;
+    if (seat) {
+      // Knocked out: sitting in the bleachers, watching the court.
+      c.root.position.set(seat.x, seat.y - 0.45, seat.z + Math.sin(seat.yaw) * 0.1);
+      c.root.rotation.y = seat.yaw;
+      pose(c, {
+        speed: 0, dt, pitch: p.id === this.local ? look.pitch : 0, sitting: true,
+        crouching: false, sliding: false, airborne: false, holding: false, action: 'none', actionT: 0, windup: 0.25,
+      });
+      return;
+    }
     c.root.position.set(lerp(prev.x, p.pos.x, alpha), lerp(prev.y, p.pos.y, alpha), lerp(prev.z, p.pos.z, alpha));
     const yaw = p.id === this.local ? look.yaw : p.yaw;
     const pitch = p.id === this.local ? look.pitch : p.pitch;
@@ -183,6 +199,19 @@ export class GameView {
     });
     // Blink during spawn protection.
     if (p.protectT > 0) c.root.visible = Math.floor(p.protectT * 10) % 2 === 0;
+  }
+
+  /** Direction a seated spectator faces (the court). */
+  seatYaw(state: GameState, id: number): number {
+    return this.seatFor(state, state.players[id]!)?.yaw ?? 0;
+  }
+
+  /** A knocked-out player's seat: their place in their team's list, on their team's end of the bleachers. */
+  private seatFor(state: GameState, p: Player): Seat | undefined {
+    const seats = this.seats[p.team];
+    if (!seats.length) return undefined;
+    const idx = state.players.filter((q) => q.team === p.team).indexOf(p);
+    return seats[idx % seats.length];
   }
 
   private drawBall(b: Ball, prev: { x: number; y: number; z: number }, alpha: number, state: GameState): void {
@@ -242,7 +271,7 @@ export class GameView {
   }
 
   private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }): void {
-    if (me.life === 'out' && this.killCamT > 0) {
+    if (me.life === 'out' && this.ragdolls.has(me.id)) {
       // Kill camera: third person, locked on your own flying ragdoll, whatever view you were in.
       const target = this.chars[me.id]!.meshes.pelvis.getWorldPosition(new THREE.Vector3());
       const f = viewDir(this.killCamYaw, 0);
@@ -256,15 +285,11 @@ export class GameView {
       this.camera.lookAt(target);
       return;
     }
-    if (me.life === 'out') {
-      // Spectate from above your own half.
-      const s = me.team === 0 ? -1 : 1;
-      this.camera.position.set(s * (state.arena.bounds.maxX - 1), 7.5 + state.arena.court.halfWidth * 0.3, 0);
-      this.camera.lookAt(0, 0.5, 0);
-      return;
-    }
-    const pos = { x: lerp(prev.x, me.pos.x, alpha), y: lerp(prev.y, me.pos.y, alpha), z: lerp(prev.z, me.pos.z, alpha) };
-    const eye = eyePos({ ...me, pos });
+    // Spectating from your bleacher seat (§9.4): you can look around, not move.
+    const seat = me.life === 'out' ? this.seatFor(state, me) : undefined;
+    const pos = seat ? { x: seat.x, y: seat.y, z: seat.z }
+      : { x: lerp(prev.x, me.pos.x, alpha), y: lerp(prev.y, me.pos.y, alpha), z: lerp(prev.z, me.pos.z, alpha) };
+    const eye = seat ? v3(seat.x, seat.y + SEATED_EYE, seat.z) : eyePos({ ...me, pos });
     const f = viewDir(look.yaw, look.pitch);
     const r = rightDir(look.yaw);
     if (this.thirdPerson) {
@@ -277,6 +302,11 @@ export class GameView {
       this.camera.lookAt(eye.x + f.x * 20 + r.x * 0.6, eye.y + f.y * 20 + 0.3, eye.z + f.z * 20 + r.z * 0.6);
     } else {
       const shake = me.life === 'tripped' ? 0.4 : 0;
+      if (seat) {
+        this.camera.position.set(eye.x, eye.y, eye.z);
+        this.camera.rotation.set(look.pitch, look.yaw - Math.PI / 2, 0, 'YXZ');
+        return;
+      }
       this.camera.position.set(eye.x, me.life === 'tripped' ? pos.y + 0.4 : eye.y, eye.z);
       this.camera.rotation.set(look.pitch, look.yaw - Math.PI / 2, shake, 'YXZ');
     }

@@ -6,11 +6,11 @@ import type { GameState, Player, SimEvent } from '../sim/types';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const SPECIAL_LABEL: Record<string, string> = {
-  slide: 'SLIDE', airborne: 'AIRBORNE', double: 'DOUBLE', bounce_out: 'BOUNCE-OUT', first: 'FIRST OUT',
+  slide: 'SLIDE', airborne: 'AIRBORNE', double: 'DOUBLE', bounce_out: 'BOUNCE-OUT', first: 'FIRST OUT', bank_shot: 'BANK SHOT',
 };
 
 // Knockout feed icons (PROJECT_PLAN.md §4.9): small inline SVGs, no downloads.
-const BALL_HEX: Record<BallType, string> = { standard: '#e03131', speed: '#ff7b00', heavy: '#3b6fe0' };
+const BALL_HEX: Record<BallType, string> = { standard: '#e03131', speed: '#ff7b00', heavy: '#3b6fe0', bounce: '#8ee000' };
 const ICON = {
   ball: (type: BallType) => `<svg class="ico" viewBox="-10 0 30 20" width="30" height="20"><path d="M-9 7h6M-10 10h7M-9 13h6" stroke="#fff" stroke-width="1.5" opacity=".6"/><circle cx="10" cy="10" r="8" fill="${BALL_HEX[type]}"/><path d="M2.5 8q7.5 3.5 15 0M2.5 12q7.5-3.5 15 0" stroke="#fff" stroke-width="1.2" fill="none" opacity=".7"/></svg>`,
   bigOof: '<svg class="ico" viewBox="0 0 22 20" width="22" height="20"><rect x="3" y="5" width="12" height="13" rx="1" fill="#d9a066"/><rect x="11" y="9" width="2" height="2" fill="#111"/><path d="M15 0l1.6 3.4 3.8.4-2.8 2.5.8 3.7L15 8.1 11.6 10l.8-3.7L9.6 3.8l3.8-.4z" fill="#ffdd33"/></svg>',
@@ -92,7 +92,7 @@ export class Hud {
     else if (me.life === 'out' && state.phase === 'play') {
       const queue = state.players.filter((q) => q.team === myTeam && q.life === 'out' && q.reviveT <= 0).sort((a, b) => a.outOrder - b.outOrder);
       const pos = queue.indexOf(me) + 1;
-      banner = me.reviveT > 0 ? 'Coming back in…' : `You're out · #${pos} to return when a teammate catches`;
+      banner = me.reviveT > 0 ? 'Coming back in…' : `You're out · #${pos} to return when a teammate catches · watching from the bleachers (V: 1st/3rd person)`;
     }
     const b = $('banner');
     b.textContent = banner;

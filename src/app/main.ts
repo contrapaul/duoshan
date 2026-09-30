@@ -48,6 +48,7 @@ function readSettings(): Settings {
 function ballMix(mix: string, players: number): BallType[] {
   const n = defaultBallTypes(players).length;
   if (mix === 'standard') return Array<BallType>(n).fill('standard');
+  if (mix === 'bounce') return Array<BallType>(n).fill('bounce');
   if (mix === 'chaos') return Array.from({ length: n }, (_, i): BallType => (i % 2 ? 'heavy' : 'speed'));
   return defaultBallTypes(players);
 }
@@ -122,6 +123,11 @@ async function start(): Promise<void> {
         view.stepPhysics(state.dt, state);
         h.onEvents(state, events);
         playEvents(events, LOCAL, state.timeScale);
+        // Knocked out: once the kill camera ends you're in the bleachers, so face the court.
+        if (events.some((e) => e.t === 'ko' && e.player === LOCAL)) {
+          input!.yaw = view.seatYaw(state, LOCAL);
+          input!.pitch = -0.3;
+        }
         if (events.some((e) => e.t === 'revive' && e.player === LOCAL) || (state.phase === 'countdown' && lastPhase !== 'countdown')) {
           input!.yaw = state.players[LOCAL]!.yaw;
           input!.pitch = 0;

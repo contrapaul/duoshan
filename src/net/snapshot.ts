@@ -12,7 +12,7 @@ export const MSG_INPUT = 2;
 const PHASES = ['countdown', 'play', 'round_end', 'match_end'] as const;
 const LIVES: Life[] = ['active', 'tripped', 'out'];
 const BALL_STATES = ['rest', 'held', 'live', 'dead'] as const;
-const BALL_TYPES: BallType[] = ['standard', 'speed', 'heavy'];
+const BALL_TYPES: BallType[] = ['standard', 'speed', 'heavy', 'bounce'];
 const ACTIONS = ['none', 'pickup', 'aim', 'catch', 'block'] as const;
 
 const TAU = Math.PI * 2;

@@ -1,44 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { botInputs, createBrain, type BotBrain } from '../bots/bot';
-import { ARENAS, CLASSIC_GYM, centerlineX, OFFSET_COURT, pushClear } from './arena';
+import { ARENAS, CLASSIC_GYM, centerlineX, FULL_COURT, pushClear, spectatorSeats } from './arena';
 import { createGame, step } from './game';
 import { v3 } from './math';
 import { NO_INPUT, type GameState, type PlayerInput } from './types';
 
 const idle = (s: GameState): PlayerInput[] => s.players.map((p) => ({ ...NO_INPUT, yaw: p.yaw, pitch: p.pitch }));
 
-describe('Offset Court', () => {
+describe('Full Court', () => {
+  it('is the default arena: a basketball-sized, obstacle-free court', () => {
+    expect(ARENAS[0]).toBe(FULL_COURT);
+    expect(FULL_COURT.court.halfLength * 2).toBe(30);
+    expect(FULL_COURT.court.halfWidth * 2).toBe(18);
+    expect(FULL_COURT.boxes.some((b) => b.kind === 'obstacle')).toBe(false);
+  });
+
   it('has a stepped centerline: each team gets a 2.5 m tongue into the other half', () => {
-    expect(centerlineX(OFFSET_COURT, 4)).toBeCloseTo(2.5);
-    expect(centerlineX(OFFSET_COURT, -4)).toBeCloseTo(-2.5);
-    expect(centerlineX(OFFSET_COURT, 0)).toBeCloseTo(0);
+    expect(centerlineX(FULL_COURT, 4)).toBeCloseTo(2.5);
+    expect(centerlineX(FULL_COURT, -4)).toBeCloseTo(-2.5);
+    expect(centerlineX(FULL_COURT, 0)).toBeCloseTo(0);
   });
 
   it('is balanced: both teams get the same court area', () => {
-    const { halfLength: L, halfWidth: W } = OFFSET_COURT.court;
+    const { halfLength: L, halfWidth: W } = FULL_COURT.court;
     let blue = 0;
     const n = 9000;
     for (let i = 0; i < n; i++) {
       const z = -W + ((i + 0.5) / n) * 2 * W;
-      blue += (centerlineX(OFFSET_COURT, z) + L) * ((2 * W) / n);
+      blue += (centerlineX(FULL_COURT, z) + L) * ((2 * W) / n);
     }
     expect(blue).toBeCloseTo(2 * L * W, 3);
   });
 
-  it('every wall has a twin rotated 180° about the court centre', () => {
-    const walls = OFFSET_COURT.boxes.filter((b) => b.kind === 'obstacle');
-    expect(walls.length).toBe(10);
-    for (const w of walls) {
-      const twin = walls.find((t) =>
-        Math.abs(t.min.x + w.max.x) < 1e-9 && Math.abs(t.max.x + w.min.x) < 1e-9 &&
-        Math.abs(t.min.z + w.max.z) < 1e-9 && Math.abs(t.max.z + w.min.z) < 1e-9);
-      expect(twin).toBeDefined();
-      expect(w.max.y).toBeCloseTo(1.1); // chest high
-    }
-  });
-
   it('knocks out by the stepped line, not by x = 0', () => {
-    const s = createGame({ seed: 1, teamSize: 1, arena: OFFSET_COURT });
+    const s = createGame({ seed: 1, teamSize: 1, arena: FULL_COURT });
     while (s.phase !== 'play') step(s, idle(s));
     const blue = s.players[0]!;
     blue.pos = v3(2.0, 0, 5); // inside Blue's tongue: legal
@@ -61,34 +56,37 @@ describe('Offset Court', () => {
       }
     }
   });
+});
 
-  it('5v5 bots play full rounds without anyone ending up inside a wall', () => {
-    const s = createGame({ seed: 21, teamSize: 5, arena: OFFSET_COURT });
-    const brains = new Map<number, BotBrain>();
-    for (const p of s.players) brains.set(p.id, createBrain(p, 'medium', 21));
-    const inputs: PlayerInput[] = [];
-    let rounds = 0;
-    for (let t = 0; t < 60 * 60 * 4 && rounds < 2; t++) {
-      botInputs(s, brains, inputs);
-      for (const e of step(s, inputs)) if (e.t === 'round_end') rounds++;
-      for (const p of s.players) {
-        if (p.life === 'out') continue;
-        for (const w of OFFSET_COURT.boxes.filter((b) => b.kind === 'obstacle')) {
-          const deep = p.pos.x > w.min.x + 0.05 && p.pos.x < w.max.x - 0.05 && p.pos.z > w.min.z + 0.05 && p.pos.z < w.max.z - 0.05 && p.pos.y < w.max.y - 0.05;
-          expect(deep).toBe(false);
+describe('spectator seats', () => {
+  it('gives each team at least 8 seats on its own end of the bleachers, facing the court', () => {
+    for (const arena of ARENAS) {
+      for (const team of [0, 1] as const) {
+        const seats = spectatorSeats(arena, team);
+        expect(seats.length).toBeGreaterThanOrEqual(8);
+        for (const seat of seats) {
+          expect(team === 0 ? seat.x < 0 : seat.x > 0).toBe(true);
+          // On top of a bleacher step, not inside one.
+          const step = arena.boxes.find((b) => b.kind === 'bleacher' && Math.abs(b.max.y - seat.y) < 1e-9
+            && seat.x >= b.min.x && seat.x <= b.max.x && seat.z >= b.min.z && seat.z <= b.max.z);
+          expect(step).toBeDefined();
+          const inside = arena.boxes.some((b) => b.max.y > seat.y + 0.01 && seat.x > b.min.x && seat.x < b.max.x && seat.z > b.min.z && seat.z < b.max.z);
+          expect(inside).toBe(false);
+          // Facing the court (the bleachers are on the +z side).
+          expect(Math.cos(seat.yaw)).toBeCloseTo(0);
+          expect(-Math.sin(seat.yaw) * Math.sign(seat.z)).toBeLessThan(0);
         }
       }
     }
-    expect(rounds).toBeGreaterThanOrEqual(1);
   });
 });
 
 describe('fun-breaking bug guards', () => {
   it('pushClear moves a point out of (and away from) walls', () => {
-    const wall = OFFSET_COURT.boxes.find((b) => b.kind === 'obstacle')!;
-    const inside = { x: (wall.min.x + wall.max.x) / 2, z: (wall.min.z + wall.max.z) / 2 };
-    const out = pushClear(OFFSET_COURT, inside.x, inside.z, 0.55);
-    for (const b of OFFSET_COURT.boxes.filter((x) => x.max.y > 0.3)) {
+    const stage = CLASSIC_GYM.boxes.find((b) => b.kind === 'stage')!;
+    const inside = { x: (stage.min.x + stage.max.x) / 2, z: (stage.min.z + stage.max.z) / 2 };
+    const out = pushClear(CLASSIC_GYM, inside.x, inside.z, 0.55);
+    for (const b of CLASSIC_GYM.boxes.filter((x) => x.max.y > 0.3)) {
       const cx = Math.min(Math.max(out.x, b.min.x), b.max.x);
       const cz = Math.min(Math.max(out.z, b.min.z), b.max.z);
       expect(Math.hypot(out.x - cx, out.z - cz)).toBeGreaterThanOrEqual(0.55 - 1e-6);
@@ -98,17 +96,17 @@ describe('fun-breaking bug guards', () => {
   });
 
   it('a player who gets up against a wall cannot be tripped again straight away', () => {
-    const s = createGame({ seed: 2, teamSize: 1, arena: OFFSET_COURT });
+    const s = createGame({ seed: 2, teamSize: 1, arena: FULL_COURT });
     while (s.phase !== 'play') step(s, idle(s));
     const p = s.players[0]!;
-    const wall = OFFSET_COURT.boxes.find((b) => b.kind === 'obstacle' && b.max.x < 0 && b.max.z - b.min.z > 2)!;
-    // Stand just in front of the wall (on its -x face), facing it.
-    p.pos = v3(wall.min.x - 1.5, 0, (wall.min.z + wall.max.z) / 2);
+    // Sprint at the hall's back wall (behind Blue's end), between the stages.
+    const wall = FULL_COURT.boxes.find((b) => b.kind === 'wall' && b.max.x <= FULL_COURT.bounds.minX)!;
+    p.pos = v3(wall.max.x + 3, 0, 8);
     let trips = 0;
     let getups = 0;
     for (let t = 0; t < 60 * 8; t++) {
       const inputs = idle(s);
-      inputs[0] = { ...NO_INPUT, yaw: 0, moveZ: 1, sprint: true };
+      inputs[0] = { ...NO_INPUT, yaw: Math.PI, moveZ: 1, sprint: true };
       for (const e of step(s, inputs)) {
         if (e.t === 'trip') trips++;
         if (e.t === 'getup') getups++;
@@ -143,5 +141,18 @@ describe('fun-breaking bug guards', () => {
       expect(loops).toBe(0);
       expect(wallTrips).toBeLessThanOrEqual(3);
     }
+  });
+
+  it('5v5 bots play full rounds on Full Court', () => {
+    const s = createGame({ seed: 21, teamSize: 5, arena: FULL_COURT });
+    const brains = new Map<number, BotBrain>();
+    for (const p of s.players) brains.set(p.id, createBrain(p, 'medium', 21));
+    const inputs: PlayerInput[] = [];
+    let rounds = 0;
+    for (let t = 0; t < 60 * 60 * 4 && rounds < 2; t++) {
+      botInputs(s, brains, inputs);
+      for (const e of step(s, inputs)) if (e.t === 'round_end') rounds++;
+    }
+    expect(rounds).toBeGreaterThanOrEqual(1);
   });
 });
