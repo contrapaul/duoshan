@@ -71,7 +71,6 @@ export function playEvents(events: SimEvent[], local: number, timeScale = 1): vo
       case 'trip': tone(200, 0.3, 0.3, 'sawtooth', 0.4); break;
       case 'round_start': tone(2100, 0.5, 0.15, 'sine'); break;
       case 'round_end': tone(520, 0.2, 0.2); setTimeout(() => tone(780, 0.35, 0.2), 180); break;
-      case 'possession_drop': tone(160, 0.2, 0.3, 'square'); break;
       default: break;
     }
   }

@@ -53,8 +53,6 @@ export const HANDLING = {
   catchConeDeg: 35,
   /** Block stance: the held ball becomes a solid shield this far in front of the chest. */
   shieldForward: 0.45,
-  possessionWarn: 8,
-  possessionMax: 10,
   inheritVelocity: 0.5,
   /** A live ball passing within this many metres of a player's body without hitting them is a "Dodge". */
   dodgeMargin: 0.6,

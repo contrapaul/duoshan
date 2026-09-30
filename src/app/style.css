@@ -45,8 +45,6 @@ button.secondary { background: #3a4456; color: var(--ink); }
 #bottom { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); text-align: center; width: 320px; }
 #held { font-weight: 800; letter-spacing: 1px; margin-bottom: 6px; font-size: 14px; opacity: 0.9; }
 #held.ball-standard { color: #ff5a5a; } #held.ball-speed { color: #ff9a3c; } #held.ball-heavy { color: #6f95ff; } #held.ball-bounce { color: #9be52f; }
-#held.warn { animation: blink 0.25s infinite alternate; }
-@keyframes blink { to { opacity: 0.2; } }
 .bar { height: 6px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
 #stamina { height: 100%; background: #7cff7c; }
 #perf { position: absolute; bottom: 8px; left: 10px; font: 12px ui-monospace, monospace; opacity: 0.75; }

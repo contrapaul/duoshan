@@ -59,7 +59,6 @@ export interface Player {
   reviveT: number; // > 0: waiting to re-enter
   protectT: number; // spawn protection
   held: number; // ball id or -1
-  heldT: number; // possession clock
   action: Action;
   catchCooldown: number;
   dashCooldown: number;
@@ -122,7 +121,6 @@ export type SimEvent =
   | { t: 'bounce'; ball: number; speed: number; surface: 'floor' | 'wall' | 'player' }
   | { t: 'catch_whiff'; player: number }
   | { t: 'dodge'; player: number; ball: number }
-  | { t: 'possession_drop'; player: number; ball: number }
   | { t: 'round_start'; round: number }
   | { t: 'round_end'; winner: Team; score: [number, number] }
   | { t: 'match_end'; winner: Team };

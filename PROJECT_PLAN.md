@@ -280,7 +280,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
   - Any live ball can hit it, from either team. The ball goes dead and drops.
   - The thrower gets **+100 Dodgecoins** (the game's currency, §6.2). This has nothing to do with winning the match: no score points.
   - The 90 s timer counts match play time and carries across rounds. If the target is still up when a round ends, it disappears.
-- **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, possession clock, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
+- **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
 - **Stacking:** a trigger during slow motion extends it, up to whichever end is later. In a **Full slow motion** match, the random triggers are off, since the match is already slow **[DECISION]**.
 - **Presentation:** audio pitch and tempo drop, a light desaturation (colour stays at **80%** saturation, per Playtest 2) and a vignette, a "SLOW-MO" banner with a countdown, and a whoosh on entry and exit.
 - **Bots** see the same slowed world, so their reactions stay fair.
@@ -353,7 +353,7 @@ Slow motion slows **the whole match for everyone at once**: movement, balls, tim
 - **Revive on catch:** when a player catches a ball, the **earliest-knocked-out** teammate returns (first out, first in) **[DECISION]**. The returning player spawns at their team's back line after 1.0 s with 1.0 s of spawn protection. Spawn protection breaks early if they pick up or throw a ball.
 - **Knocked-out players:** after the kill camera (§4.9), they spectate (free camera over their team's half, or follow-cam on a teammate) and see their position in the return queue. They keep text chat.
 - **Anti-stall:**
-  - **Possession clock:** a held ball starts pulsing after 8 s and **goes dead in the holder's hand at 10 s**, dropping at their feet. The pulsing warns the holder first.
+  - *(The possession clock, which dropped a ball held for 10 s, was removed on 2026-09-30 at the owner's request. Players can hold a ball indefinitely, for example to shield with it.)*
   - **Round overtime:** after 2:30 in a round, the court's back boundaries slowly move inward. In Classic Gym this is shown as the out-of-bounds lines advancing, which squeezes players toward the centerline. In Hypergym it happens through the dynamic line system.
 - **Match end:** first team to **4 round wins** (best of 7), or **10:00** of match time. If time runs out, the team with more round wins wins. If round wins are tied, the current round finishes with **sudden death**: the next knockout of either side ends it **[DECISION]**.
 - **Round transition:** 5 s scoreboard and highlight, then reset.
@@ -1051,7 +1051,7 @@ export const speedBall: BallDef = {
 ```
 - **Arenas:** an `ArenaDef` pointing at a glTF scene plus a metadata file (bounds, zones, line definition, spawns, banner slots).
 - **Uniforms:** `UniformDef` with ID, voxel file reference, palette, rarity, price, and release/retire dates.
-- **Modes:** `ModeDef` with rules parameters (round count, timers, respawn, possession clock), so variants like "Heavy-only Friday" become configuration.
+- **Modes:** `ModeDef` with rules parameters (round count, timers, respawn), so variants like "Heavy-only Friday" become configuration.
 - **Validation:** a CI step checks every definition, including unique IDs, referenced assets that exist, banner slot aspect ratios, and a correct centerline definition.
 
 ### 14.3 Arena authoring
@@ -1094,7 +1094,7 @@ export const speedBall: BallDef = {
 | Item | Status | Result |
 |---|---|---|
 | Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
-| Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, possession clock, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
+| Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
 | **S1** performance on an M1 MacBook Air | ⏳ **Owner to run** | Open the demo, choose "8v8 stress test", and read the fps line at bottom-left. Download size: 150 KB gzip for the menu, plus 1.7 MB for physics loaded on Play. |
 | **S2** latency from Shenzhen | ⏳ **Owner to run** after `npm run deploy` | `/latency.html` → Full test. Verified locally: 30 updates/s, ~8.7 KB/s down, ~1.1 KB/s up, 60 room ticks/s. |
 | **S3** referee loop in a Durable Object | ✅ Locally / ⏳ on Cloudflare | `npm run bench`: 8v8 averages 0.075 ms per tick. In `wrangler dev`, the DO holds 60 ticks/s with a worst timer gap of ~25 ms. The Cloudflare numbers come from the same latency page. Rapier-in-DO wasn't needed. |
@@ -1131,7 +1131,7 @@ export const speedBall: BallDef = {
 
 #### Phase 3: Classic Complete → **ALPHA** (Weeks 13–16)
 **Goal:** a complete Classic match loop, playable by students.
-- Rounds, revive-on-catch, the return queue, spectating, possession clock, overtime, match end, and sudden death.
+- Rounds, revive-on-catch, the return queue, spectating, overtime, match end, and sudden death.
 - Scoring, kill feed, special KOs, and the scoreboard and end-of-match screens.
 - **Speed and Heavy balls** with their full effects.
 - The Classic FPV mode, the settings menu (sensitivity, FOV, keybinds, graphics presets, audio), and the quick-chat wheel.
@@ -1274,7 +1274,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Q-G4 | B | Max balls held at once: 1 or 2? | 1 |
 | Q-G5 | B | **Ultimate:** is the Brawl (respawns) → Last Stand (no respawns) reconciliation right? Or should it be pure deathmatch, or pure last-man-standing rounds? | Brawl 8 min + Last Stand 2 min |
 | Q-G6 | B | Do bots fill to **6 total participants** (3v3)? | Yes |
-| Q-G7 | B | Are you happy with the possession clock (10 s) and round overtime (shrinking court) as anti-stall rules? | Yes |
+| Q-G7 | ✅ | Anti-stall: **no possession clock**, so players may hold a ball indefinitely (owner, 2026-09-30). Round overtime (shrinking court) remains the planned anti-stall rule. | — |
 | Q-G8 | B | Match timeout tiebreak: is sudden death OK? | Yes |
 | Q-G9 | C | Which revive order: first-out-first-in, or the catcher chooses? | First out, first in |
 | Q-G10 | ✅ | Big oof slow motion: **8 s** (target: 12 s). | — |
@@ -1332,7 +1332,6 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Catch window / cooldown | 0.35 s / 0.5 s |
 | Catch volume / view cone | 0.7 m / 35° (Speed ball: 0.6 m / 30°) |
 | Block | Physics shield while RMB held; raise time 0.10 s (Std/Spd) / 0.25 s (Hvy); shield 0.45 m in front of chest; walk speed while raised |
-| Possession clock | warn 8 s, dead at 10 s |
 | **Balls per Classic match** (by total players) | 6 players: 4 balls; 10 players: 6 balls; 16 players: 8 balls. Default mix: 60% Standard, 25% Speed, 15% Heavy. |
 | **Rules** | |
 | Classic match | first to 4 rounds, or 10:00 |

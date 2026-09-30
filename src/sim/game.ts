@@ -57,7 +57,7 @@ export function createGame(opts: GameOptions): GameState {
       slideT: 0, slideCooldown: 0,
       stamina: PLAYER.staminaMax, staminaIdle: 0,
       life: 'active', tripT: 0, tripImmuneT: 0, outOrder: 0, reviveT: 0, protectT: 0,
-      held: -1, heldT: 0,
+      held: -1,
       action: { kind: 'none' }, catchCooldown: 0, dashCooldown: 0,
       forceT: 0, forceDur: 0, forceVel: v3(),
       prevPrimary: false, prevUse: false, useShield: false, prevJump: false,
@@ -94,7 +94,7 @@ export function resetRound(state: GameState): void {
     p.pitch = 0;
     p.life = 'active';
     p.tripT = 0; p.tripImmuneT = 0; p.reviveT = 0; p.protectT = 0; p.outOrder = 0;
-    p.held = -1; p.heldT = 0; p.action = { kind: 'none' };
+    p.held = -1; p.action = { kind: 'none' };
     p.slideT = 0; p.slideCooldown = 0; p.stamina = PLAYER.staminaMax;
     p.dashCooldown = 0; p.forceT = 0;
     p.crouching = false; p.sprinting = false; p.onGround = true;
@@ -508,7 +508,6 @@ function updateActions(state: GameState, p: Player, input: PlayerInput): void {
           ball.holder = p.id;
           ball.vel = v3();
           p.held = ball.id;
-          p.heldT = 0;
           p.protectT = 0;
           state.events.push({ t: 'pickup', player: p.id, ball: ball.id });
         }
@@ -544,15 +543,6 @@ function updateActions(state: GameState, p: Player, input: PlayerInput): void {
       break;
   }
 
-  // Possession clock (§5.1 anti-stall).
-  if (p.held >= 0) {
-    p.heldT += DT;
-    if (p.heldT >= HANDLING.possessionMax) {
-      const ball = state.balls[p.held]!;
-      dropBall(p, ball);
-      state.events.push({ t: 'possession_drop', player: p.id, ball: ball.id });
-    }
-  }
 }
 
 export function findPickup(state: GameState, p: Player): Ball | undefined {
@@ -597,7 +587,6 @@ function throwBall(state: GameState, p: Player, ball: Ball, charge: number): voi
   ball.deflectedBy = -1;
   ball.flags = [...(p.slideT > 0 ? ['slide'] : []), ...(!p.onGround ? ['airborne'] : [])];
   p.held = -1;
-  p.heldT = 0;
   p.protectT = 0;
   state.events.push({ t: 'throw', player: p.id, ball: ball.id, charge });
 }
@@ -610,7 +599,6 @@ function dropBall(p: Player, ball: Ball): void {
   ball.pos = handPos(p);
   ball.vel = v3(p.vel.x, 0, p.vel.z);
   p.held = -1;
-  p.heldT = 0;
   if (p.action.kind === 'aim' || p.action.kind === 'block') p.action = { kind: 'none' };
 }
 
@@ -903,7 +891,6 @@ function checkCatch(state: GameState, ball: Ball): boolean {
     ball.holder = p.id;
     ball.vel = v3();
     p.held = ball.id;
-    p.heldT = 0;
     p.catches++;
     p.score += SCORE.catch;
     p.action = { kind: 'none' };

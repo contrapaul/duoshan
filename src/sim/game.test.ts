@@ -518,3 +518,16 @@ describe('E shield', () => {
     expect(kinds.slice(34)).toContain('block'); // pressed again with the ball in hand
   });
 });
+
+describe('holding a ball', () => {
+  it('can be held indefinitely: no possession clock', () => {
+    const s = createGame({ seed: 3, teamSize: 1 });
+    live(s);
+    const p = s.players[0]!;
+    const ball = s.balls[0]!;
+    ball.state = 'held'; ball.holder = p.id; p.held = ball.id;
+    runTicks(s, 60 * 60);
+    expect(p.held).toBe(ball.id);
+    expect(ball.state).toBe('held');
+  });
+});

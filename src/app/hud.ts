@@ -81,7 +81,6 @@ export class Hud {
       }
       if (e.t === 'ko' && e.player === this.local) this.hurt = 0.8;
       if (e.t === 'block' && e.broke && e.player === this.local) this.hurt = 0.4;
-      if (e.t === 'possession_drop' && e.player === this.local) this.showFlash('Too slow! Ball dropped');
       if (e.t === 'round_start') this.showBanner('DODGE!', 1.2);
       if (e.t === 'round_end') this.showBanner(`${e.winner === state.players[this.local]!.team ? 'Your team' : 'Other team'} wins the round`, 3);
       if (e.t === 'match_end') this.showBanner(`${e.winner === state.players[this.local]!.team ? 'YOU WIN THE MATCH' : 'Match lost'}`, 3);
@@ -143,8 +142,8 @@ export class Hud {
     const ball = me.held >= 0 ? state.balls[me.held] : undefined;
     const held = $('held');
     const shield = me.action.kind === 'block' ? ' · SHIELD UP' : '';
-    held.textContent = ball ? `${ball.type.toUpperCase()} BALL${shield}${me.heldT > HANDLING.possessionWarn ? ' · THROW IT!' : ''}` : me.life === 'active' ? 'empty hands: click or E to catch' : '';
-    held.className = ball ? `ball-${ball.type}${me.heldT > HANDLING.possessionWarn ? ' warn' : ''}` : '';
+    held.textContent = ball ? `${ball.type.toUpperCase()} BALL${shield}` : me.life === 'active' ? 'empty hands: click or E to catch' : '';
+    held.className = ball ? `ball-${ball.type}` : '';
     const ring = $('charge');
     if (me.action.kind === 'aim' && ball) {
       const def = BALLS[ball.type];
