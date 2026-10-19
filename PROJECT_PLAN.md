@@ -992,6 +992,22 @@ The message rate is also typical. Competitive shooters exchange 20–128 updates
 | 100–180 ms | Proceed. The netcode above (forward-predicted balls, defender-favoured catches) is built for this. Tune catch and block windows wider. Also add **Local Host mode** (below) for in-school play. |
 | > 180 ms or unstable | Make **Local Host mode** the default for school play, with Cloudflare rooms for worldwide play |
 
+- **Result (2026-10-19, owner, Shenzhen, Firefox on Mac):**
+
+| Measure | Value |
+|---|---|
+| Routing | Location hint `apac`. Edge **KIX (Osaka, JP)**, room KIX (not Hong Kong, but close) |
+| WebSocket RTT | median **68 ms**, p95 101 ms, max 364 ms, jitter 9 ms, loss 0.0% (584 pings) |
+| Snapshots | 30.0/s, gap p95 48 ms, down 8.7 KB/s, up 1.0 KB/s |
+| Room (DO) | 60 ticks/s, worst timer gap 16 ms |
+| HTTP edge | median 107 ms |
+
+- **Decision: row 1, proceed as designed.** Cloudflare rooms serve school play. Local Host mode is **not built** in Phase 2; it stays documented below as a fallback in case later measurements change the picture.
+- **Follow-ups (not blocking):**
+  - Repeat the test from the other Shenzhen location (school vs home) and at a busy time of day (after school, evenings) to confirm the median stays ≤ 100 ms.
+  - The single 364 ms spike means occasional hitches. Snapshot interpolation and reconnect handling in Phase 2 must ride out isolated spikes of ~400 ms without dropping the player.
+  - The `*.workers.dev` comparison is no longer needed, because the custom domain already performs well.
+
 - **Local Host mode (fallback, cheap to add because of the pure sim):**
   - One player's browser runs `src/sim` as the referee, the same code as the DO.
   - The other players connect **peer-to-peer over WebRTC data channels**. The `GameRoom` DO only does matchmaking and connection setup. A relay (TURN) service is a backup for networks that block direct connections.
@@ -1096,8 +1112,8 @@ export const speedBall: BallDef = {
 | Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
 | Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
 | **S1** performance on an M1 MacBook Air | ⏳ **Owner to run** | Open the demo, choose "8v8 stress test", and read the fps line at bottom-left. Download size: 150 KB gzip for the menu, plus 1.7 MB for physics loaded on Play. |
-| **S2** latency from Shenzhen | ⏳ **Owner to run** after `npm run deploy` | `/latency.html` → Full test. Verified locally: 30 updates/s, ~8.7 KB/s down, ~1.1 KB/s up, 60 room ticks/s. |
-| **S3** referee loop in a Durable Object | ✅ Locally / ⏳ on Cloudflare | `npm run bench`: 8v8 averages 0.075 ms per tick. In `wrangler dev`, the DO holds 60 ticks/s with a worst timer gap of ~25 ms. The Cloudflare numbers come from the same latency page. Rapier-in-DO wasn't needed. |
+| **S2** latency from Shenzhen | ✅ **Done (2026-10-19)** | Edge and room in KIX (Osaka). Median RTT **68 ms**, p95 101 ms, jitter 9 ms, 0% loss; 30 updates/s at 8.7 KB/s down. **Verdict: proceed as designed (§13.10, row 1); no Local Host mode.** A repeat from the other Shenzhen location at a busy hour is a non-blocking follow-up. |
+| **S3** referee loop in a Durable Object | ✅ Done | `npm run bench`: 8v8 averages 0.075 ms per tick. On Cloudflare (KIX), the DO held 60 ticks/s with a worst timer gap of 16 ms. Rapier-in-DO wasn't needed. |
 | **S4** netcode feel at 150 ms | ⏭ Moved to Phase 2 | It needs the prediction layer. The binary snapshot codec (~300 bytes at 8v8) is already built and tested. |
 
 **Tuning notes from building it:**
@@ -1127,7 +1143,7 @@ export const speedBall: BallDef = {
 - The load-test harness and netcode test harness, plus a capacity measurement.
 
 **Exit criteria:** an 8v8 playtest (with bots filling in) at school feels fair, and there are no "I caught it on my screen" complaints above a small threshold. DO tick CPU p99 stays under 4 ms per room.
-- **If spike S2 said so:** Local Host mode (WebRTC peer-to-peer with the same sim) is built in this phase.
+- **Local Host mode is not built in this phase:** spike S2 measured a 68 ms median from Shenzhen (§13.10, row 1).
 
 #### Phase 3: Classic Complete → **ALPHA** (Weeks 13–16)
 **Goal:** a complete Classic match loop, playable by students.
@@ -1220,7 +1236,7 @@ These dates assume part-time owner availability and include normal school holida
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| R1 | **Latency from Shenzhen to Cloudflare is high or unstable.** Standard Cloudflare plans don't serve from the mainland and can route via distant PoPs. | **High** | Critical | Phase 0 spike S2 with a decision rule (§13.10), netcode built for 100–180 ms, and the **Local Host mode** fallback for in-school play |
+| R1 | **Latency from Shenzhen to Cloudflare is high or unstable.** Standard Cloudflare plans don't serve from the mainland and can route via distant PoPs. | Low *(was High; S2 measured a 68 ms median via KIX, 2026-10-19)* | Critical | Repeat the test at busy hours and from the other location; netcode built for 100–180 ms; the **Local Host mode** fallback stays documented (§13.10) |
 | R2 | **Netcode feels unfair**, especially catches and blocks | High | Critical | Forward-predicted balls, defender-favoured bounded rewind, the Phase 2 harness, and early playtests from Shenzhen |
 | R3 | **Custom gameplay physics is too limited** (inflatables, ramps, edge cases) | Medium | Medium | Keep the physics needs narrow by design. Rapier-in-DO is the tested escape hatch (spike S3), and headless bot matches catch stuck or tunnelling balls. |
 | R4 | **Durable Object limits or tick jitter** (single thread, timer precision, eviction) | Medium | High | Spike S3 measures it. Keep the sim cheap. Clients tolerate jitter through interpolation, and reconnect-to-seat exists (the Flashstone pattern). |
@@ -1260,7 +1276,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 |---|---|---|---|
 | Q-T9 | ✅ | Address: **`duoshan.contrapaul.com`** confirmed. | — |
 | Q-T10 | ✅ | Workers Paid plan: **already in place.** Expected extra cost is about $3/month at school scale, and about $17 if the game spreads widely (§13.9). | — |
-| Q-T11 | A | Latency test from school and home in Shenzhen: **owner will run it on return to Shenzhen.** Building the test page is the first Phase 0 task. | — |
+| Q-T11 | ✅ | Latency test from Shenzhen: **run 2026-10-19.** Median 68 ms via KIX (Osaka), so proceed as designed (§13.10). A repeat from the other location at a busy hour is a non-blocking follow-up. | — |
 | Q-T12 | B | If Shenzhen latency is poor, is **Local Host mode** (one student's browser referees, and classmates connect peer-to-peer) acceptable for in-school play? | Yes, as a fallback |
 | Q-T13 | B | Should the game be playable during school hours, or is it after-school/home only? | Both |
 | Q-T8 | C | Is mobile/tablet (touch) support ever desired? | Out of scope for 1.0 |
@@ -1377,7 +1393,7 @@ Each epic becomes a GitHub milestone/label. Stories are sized S (< 1 day of agen
 | E20 Banners | slots in client (M), campaign admin (M), manifest delivery (S) | 6 |
 | E21 Audio | audio engine + mixer (M), placeholder set (S), owner recording integration (M) | 1, 7 |
 | E22 Ops | DO metrics + telemetry endpoint (M), latency probe page (S), usage/cost alerts (S), load test (M) | 0, 2, 7 |
-| E23 Local Host mode (conditional) | host-side referee in Web Worker (M), WebRTC data channels + DO signalling (M), host migration or graceful end (M) | 2 |
+| E23 Local Host mode (conditional; **not needed** after S2, kept as a fallback) | host-side referee in Web Worker (M), WebRTC data channels + DO signalling (M), host migration or graceful end (M) | 2 |
 
 ### 18.3 Glossary
 - **Live ball:** a thrown ball that hasn't touched the environment yet. It can knock players out.

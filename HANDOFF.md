@@ -1,6 +1,6 @@
 # DuoShan — Session Handoff
 
-*Status as of 2026-10-01. Read this first, then `PROJECT_PLAN.md` (the source of truth for design and architecture) and `CLAUDE.md` (coding guidelines).*
+*Status as of 2026-10-19 (latency test results added). Read this first, then `PROJECT_PLAN.md` (the source of truth for design and architecture) and `CLAUDE.md` (coding guidelines).*
 
 ## 1. What this is
 
@@ -31,15 +31,15 @@ DuoShan is a browser-based multiplayer dodgeball game (first person, voxel chara
 | Netcode plan | The server-authoritative DO runs at 60 Hz. Clients use prediction and reconciliation. Balls are forward-predicted. Catches are defender-favoured, with up to 200 ms of rewind. Binary snapshots are ~300 B at 8v8, about 9 KB/s per client. |
 | Voice chat | Scrapped. |
 | Possession clock | Removed. Players can hold a ball indefinitely. Anti-stall is handled by the planned **round overtime** (Phase 3). |
-| Latency rule (§13.10) | Median RTT from Shenzhen to Cloudflare decides the netcode path:<br>• ≤100 ms: proceed as planned.<br>• 100–180 ms: also build **Local Host mode** (P2P WebRTC running the same sim).<br>• >180 ms: Local Host mode becomes the default. |
+| Latency rule (§13.10) | Median RTT from Shenzhen to Cloudflare decides the netcode path:<br>• ≤100 ms: proceed as planned.<br>• 100–180 ms: also build **Local Host mode** (P2P WebRTC running the same sim).<br>• >180 ms: Local Host mode becomes the default.<br>**Measured 2026-10-19: 68 ms median (edge and room in KIX/Osaka) → proceed as planned; Local Host mode is not built.** |
 
 ## 4. Progress by phase (§15)
 
 | Phase | Status |
 |---|---|
-| 0 Foundations | ✅ Done. Two checks remain, and only the owner can run them (§6). |
+| 0 Foundations | ✅ Done. S2 latency passed (68 ms median from Shenzhen). Only the S1 M1 fps check remains (§6). |
 | 1 Offline feel prototype | ✅ Done, and well beyond the plan (two playtest rounds incorporated) |
-| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | ⬜ Not started. Gated on the latency results. |
+| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | ⬜ Not started. **Unblocked:** latency passed, so build it on Cloudflare DOs as designed (no Local Host mode). |
 | 3 Alpha (round overtime/shrinking court, sudden death, match clock, tutorial, art pass) | ⬜ Not started |
 | 4 Accounts, chat, moderation, admin (D1 not yet created) | ⬜ Not started |
 | 5 Arenas: Hypergym, Neighborhood, City Block, Ultimate | ⬜ Not started |
@@ -110,13 +110,20 @@ Balls keep their colour on the ground and glow in their own colour while live. B
 - No match clock or overtime, so rounds can stall.
 - Sounds are synthesized placeholders.
 
-## 6. Waiting on the owner (blocks Phase 2)
+## 6. Latency result and owner follow-ups
 
-1. **Deploy:** `git pull origin claude/vigilant-goodall-60nmx3 && npm run deploy`.
-2. **Spike S2, latency:** run the Full test at `https://duoshan.contrapaul.com/latency.html` from school and from home in Shenzhen, then paste the copied results. Apply the §13.10 rule.
-3. **Spike S1, fps:** check frame rate on an M1 Air using the menu's "8v8 stress test" match.
+**Spike S2, done 2026-10-19** (owner, Shenzhen, Firefox on Mac; full table in `PROJECT_PLAN.md` §13.10):
+- **Routing:** edge KIX (Osaka) → room KIX.
+- **WebSocket RTT:** median 68 ms, p95 101 ms, max 364 ms, jitter 9 ms, 0% loss.
+- **Snapshots:** 30/s at 8.7 KB/s down, 1.0 KB/s up.
+- **Room (DO):** 60 ticks/s, worst timer gap 16 ms.
+- **Verdict:** proceed as designed. Phase 2 is unblocked.
 
-**While waiting:** work that doesn't depend on latency is safe to do. Candidates are round overtime, the tutorial, and more arenas. Ask the owner which one first.
+**Still open on the owner's side (none of these block Phase 2):**
+1. **Spike S1, fps:** check frame rate on an M1 Air using the menu's "8v8 stress test" match.
+2. **Repeat the latency test** from the other Shenzhen location (school vs home) at a busy hour, to confirm the median stays ≤ 100 ms.
+
+**Note for Phase 2:** the 364 ms max shows occasional spikes. Interpolation and reconnect logic should ride out isolated ~400 ms spikes without dropping the player.
 
 ## 7. Code map
 
