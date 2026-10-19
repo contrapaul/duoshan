@@ -5,10 +5,11 @@
  * Human-like limits: reaction delay, aim error, and a per-ball decision to catch,
  * block or dodge made once when the bot "notices" the throw.
  */
-import { eyePos, findPickup, teamSign } from '../sim/game';
+import { centerlineX } from '../sim/arena';
+import { eyePos, findPickup, sideDepth, teamSign } from '../sim/game';
 import { angleDiff, clamp, dist, distXZ, dot, len, norm, rightDir, sub, v3, viewDir, type Vec3 } from '../sim/math';
 import { nextFloat, nextGauss, type Rng } from '../sim/rng';
-import { BALLS, GRAVITY } from '../sim/tuning';
+import { BALLS, GRAVITY, PLAYER } from '../sim/tuning';
 import type { Ball, GameState, Player, PlayerInput } from '../sim/types';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -52,7 +53,7 @@ const DT = 1 / 60;
 export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerInput {
   const skill = SKILL[brain.difficulty];
   const idle: PlayerInput = {
-    moveX: 0, moveZ: 0, yaw: brain.yaw, pitch: brain.pitch, sprint: false, crouch: false, jump: false, primary: false, secondary: false,
+    moveX: 0, moveZ: 0, yaw: brain.yaw, pitch: brain.pitch, sprint: false, crouch: false, jump: false, primary: false, secondary: false, use: false,
   };
   if (p.life !== 'active' || state.phase !== 'play') {
     brain.primary = false;
@@ -85,7 +86,8 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
     if (plan === 'catch' && p.held < 0) {
       if (tHit < 0.22) primary = true;
     } else if (plan === 'block' && p.held >= 0) {
-      if (tHit < 0.2) secondary = true;
+      // Raise the shield early and hold it until the ball arrives (§4.3.3).
+      if (tHit < 0.5) secondary = true;
     } else {
       // Dodge sideways, away from where the ball is heading.
       const bv = norm(v3(ball.vel.x, 0, ball.vel.z));
@@ -96,7 +98,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       sprint = true;
       const impactY = ball.pos.y + ball.vel.y * tHit - 0.5 * GRAVITY * BALLS[ball.type].gravityScale * tHit * tHit;
       if (impactY > p.pos.y + 1.1 && nextFloat(brain.rng) < 0.5) crouch = true;
-      else if (impactY < p.pos.y + 0.6) jump = true;
+      else if (tHit < 0.35) jump = true; // moving sideways, so Space is a sidestep dash
     }
   } else if (p.held >= 0) {
     // 2. Holding a ball: pick a target, move up, aim and throw.
@@ -107,7 +109,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       const aim = aimAt(p, target, def.speedQuick, def.gravityScale);
       brain.yaw = turnToward(brain.yaw, aim.yaw + brain.errYaw, skill.turn);
       brain.pitch = aim.pitch + brain.errPitch;
-      const x = sign * brain.wanderX;
+      const x = centerlineX(state.arena, p.pos.z) + sign * brain.wanderX;
       wish = norm(v3(x - p.pos.x, 0, brain.strafe * 3));
       const range = def.type === 'heavy' ? 11 : 17;
       const aligned = Math.abs(angleDiff(brain.yaw, aim.yaw + brain.errYaw)) < 0.08;
@@ -125,7 +127,7 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
         brain.holdT = 0;
       }
     }
-    return finish(p, brain, wish, sprint, crouch, jump, primary, secondary, undefined);
+    return finish(state, p, brain, wish, sprint, crouch, jump, primary, secondary, undefined);
   } else {
     // 3. Empty-handed: go get the nearest free ball on our side.
     const ball = nearestFreeBall(state, p);
@@ -136,15 +138,15 @@ export function botInput(state: GameState, p: Player, brain: BotBrain): PlayerIn
       if (findPickup(state, p)?.id === ball.id && !brain.primary) primary = true;
     } else {
       // Nothing to grab: hang back and strafe, facing the other team.
-      wish = norm(v3(sign * 6 - p.pos.x, 0, brain.strafe * 2));
+      wish = norm(v3(centerlineX(state.arena, p.pos.z) + sign * 6 - p.pos.x, 0, brain.strafe * 2));
       lookAt = v3(-sign * 6, 1.2, p.pos.z);
     }
   }
-  return finish(p, brain, wish, sprint, crouch, jump, primary, secondary, lookAt);
+  return finish(state, p, brain, wish, sprint, crouch, jump, primary, secondary, lookAt);
 }
 
 function finish(
-  p: Player, brain: BotBrain, wish: Vec3, sprint: boolean, crouch: boolean, jump: boolean,
+  state: GameState, p: Player, brain: BotBrain, wish: Vec3, sprint: boolean, crouch: boolean, jump: boolean,
   primary: boolean, secondary: boolean, lookAt: Vec3 | undefined,
 ): PlayerInput {
   const skill = SKILL[brain.difficulty];
@@ -157,9 +159,12 @@ function finish(
   }
   // Never wander over the centerline: steer back if close.
   const sign = teamSign(p.team);
-  const depth = p.pos.x * sign;
+  const depth = sideDepth(state, p.team, p.pos.x, p.pos.z);
   if (depth < 1.2 && wish.x * sign < 0) wish = v3(0, 0, wish.z);
   if (depth < 0.8) wish = v3(sign, 0, wish.z);
+  // Steer along walls instead of running into them, and never sprint at one.
+  const avoided = avoidWalls(state, p, wish);
+  if (avoided) { wish = avoided; sprint = false; }
   const f = viewDir(brain.yaw, 0);
   const r = rightDir(brain.yaw);
   brain.primary = primary;
@@ -170,8 +175,29 @@ function finish(
     yaw: brain.yaw,
     pitch: brain.pitch,
     sprint: sprint && dot(wish, f) > 0.3,
-    crouch, jump, primary, secondary,
+    crouch, jump, primary, secondary, use: false,
   };
+}
+
+/** If moving along `wish` would run into a wall within ~1 m, return a direction sliding along it. */
+function avoidWalls(state: GameState, p: Player, wish: Vec3): Vec3 | undefined {
+  if (Math.hypot(wish.x, wish.z) < 0.1) return undefined;
+  const probe = 1.0;
+  const px = p.pos.x + wish.x * probe;
+  const pz = p.pos.z + wish.z * probe;
+  const pad = PLAYER.radius + 0.15;
+  for (const b of state.arena.boxes) {
+    if (b.max.y - p.pos.y <= 0.35 || b.min.y > p.pos.y + 1.5) continue; // step-up height or overhead
+    if (px < b.min.x - pad || px > b.max.x + pad || pz < b.min.z - pad || pz > b.max.z + pad) continue;
+    const cx = clamp(p.pos.x, b.min.x, b.max.x);
+    const cz = clamp(p.pos.z, b.min.z, b.max.z);
+    let n = norm(v3(p.pos.x - cx, 0, p.pos.z - cz));
+    if (n.x === 0 && n.z === 0) n = norm(v3(-wish.x, 0, -wish.z));
+    let t = v3(-n.z, 0, n.x);
+    if (dot(t, wish) < 0) t = v3(n.z, 0, -n.x);
+    return t;
+  }
+  return undefined;
 }
 
 function turnToward(from: number, to: number, rate: number): number {
@@ -203,7 +229,7 @@ function findThreat(
       const skill = SKILL[brain.difficulty];
       const roll = nextFloat(brain.rng);
       const plan: Plan = p.held < 0 && def.catchable && roll < skill.catchP ? 'catch'
-        : p.held >= 0 && def.blockable && roll < skill.blockP ? 'block' : 'dodge';
+        : p.held >= 0 && !def.breaksShield && roll < skill.blockP ? 'block' : 'dodge';
       seen = { at: state.time, plan, throwTick: ball.thrower };
       brain.seen.set(ball.id, seen);
     }
@@ -228,12 +254,11 @@ function pickTarget(state: GameState, p: Player, brain: BotBrain): Player | unde
 }
 
 function nearestFreeBall(state: GameState, p: Player): Ball | undefined {
-  const sign = teamSign(p.team);
   let best: Ball | undefined;
   let bestD = Infinity;
   for (const b of state.balls) {
     if (b.state !== 'rest' && b.state !== 'dead') continue;
-    if (b.pos.x * sign < -0.9) continue; // out of reach on the other side
+    if (sideDepth(state, p.team, b.pos.x, b.pos.z) < -0.9) continue; // out of reach on the other side
     if (Math.abs(b.pos.z) > state.arena.bounds.maxZ - 0.5) continue;
     const d = distXZ(b.pos, p.pos);
     // Prefer balls nobody else on our team is closer to.

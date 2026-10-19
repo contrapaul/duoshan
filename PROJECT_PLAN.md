@@ -1,7 +1,7 @@
 # Duǒshǎn 躲闪 — Elite Dodgeball
 ## Detailed Project Plan
 
-> **Status:** Draft v0.4, 2026-09-28. **Phase 0 tech demo built** (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
+> **Status:** Draft v0.6, 2026-09-28. v0.6 adds the **Playtest 2 changes** (§4.9), which the next build implements. v0.5 added the Playtest 1 changes (§4.8, built). The Phase 0 tech demo is built (see the Phase 0 status in §15.2). v0.3 removed voice chat, confirmed `duoshan.contrapaul.com`, and explained cost units and bandwidth (§13.9).
 > Draft v0.2, 2026-09-26. Built from `plans.md`.
 > **v0.2 changes (owner answers):**
 > - The architecture is now serverless Cloudflare (Workers, D1, Durable Objects), matching the owner's other projects. There are no dedicated game servers.
@@ -110,14 +110,18 @@ All units are metres, seconds, and kilograms. Values marked ◆ are tuning start
 |---|---|---|
 | Move | W A S D | |
 | Sprint | Shift (hold) | Uses stamina |
-| Jump | Space | Short hop |
+| Jump | Space | Short hop (when A/D are not held) |
+| Sidestep dash | A or D + Space | Short sideways burst (§4.2). Replaces jumping while strafing. |
 | Crouch / duck | C (hold) | **Not Ctrl.** Ctrl+W closes the browser tab and can't be intercepted outside fullscreen Keyboard Lock. |
 | Slide | Crouch while sprinting | |
 | Pick up / Catch / Throw | Left mouse | Context-sensitive (§4.3) |
-| Block | Right mouse (tap) | Requires holding a ball |
+| Throw (second button) | Q | Same as left mouse. Makes trackpad play easier. |
+| Pick up / Catch | E | Same as left mouse with empty hands. |
+| Shield (hold) | E held with a ball | Same as holding right mouse: raises the ball as a shield. It only works if E is pressed *after* you have the ball, so holding E through a pickup doesn't raise it. |
+| Block stance | Right mouse (**hold**) | Requires a ball. Holds it out in front as a physical shield (§4.3.3). Trackpad: two-finger click and hold. |
 | Toggle 1st/3rd person | V | Disabled in Classic FPV |
 | Text chat | Enter (all) / Y (team) | Accounts only; guests see a sign-up prompt |
-| Scoreboard | Tab | |
+| Scoreboard | Tab (hold) | Players, teams and scores (§4.9) |
 | Menu | Esc | Also releases pointer lock |
 
 All keys are rebindable. The game uses Pointer Lock for mouse look and offers optional fullscreen, which enables Keyboard Lock where supported.
@@ -131,6 +135,7 @@ All keys are rebindable. The game uses Pointer Lock for mouse look and offers op
 | Crouch walk | 2.2 m/s. Hitbox height drops to about 60%. |
 | Jump | About 0.6 m apex. No double jump. Air control 30%. |
 | Slide | Needs ≥ 80% sprint speed. Starts at 8.0 m/s, decays over 0.8 s. Hitbox is low. Cooldown 1.0 s. Costs 0.5 s of stamina. |
+| **Sidestep dash** | Space while holding A or D, on the ground. Moves **~2.5 m sideways over 0.2 s** (relative to the view), then returns to normal speed. Cooldown 0.8 s. Costs 0.4 s of stamina. Diagonals (W+D+Space) dash straight sideways **[DECISION]**. With too little stamina, Space does a normal jump. You can throw, catch, and block during a dash. Not available while sliding, crouching, or airborne. |
 | Tripped | Ragdoll for 1.2–2.0 s (depends on the cause), then a get-up animation of 0.6 s. The player cannot act during either. |
 
 **Trip triggers:**
@@ -143,30 +148,31 @@ All keys are rebindable. The game uses Pointer Lock for mouse look and offers op
 
 ### 4.3 Ball handling — the core verbs
 
-A player holds **at most one ball** **[DECISION]**. The left mouse button is context-sensitive:
+A player holds **at most one ball** **[DECISION]**. The left mouse button is context-sensitive. **E** does the same as left mouse whenever your hands are empty (pick up or catch):
 
 | Hands | Input | Result |
 |---|---|---|
-| Empty | Tap LMB, targeting a ball on the ground within 1.6 m | **Pick up** (0.15 s) |
-| Empty | Press and hold LMB with no ball in reach | **Catch stance** (§4.3.2) |
+| Empty | Tap LMB **or E**, targeting a ball on the ground within 1.6 m | **Pick up** (0.15 s) |
+| Empty | Press and hold LMB **or E** with no ball in reach | **Catch stance** (§4.3.2) |
 | Holding | Tap LMB | **Quick throw.** Wind-up, then release (§4.3.1). |
 | Holding | Hold LMB (up to 1.2 s), release | **Aimed throw.** Spread shrinks as the hold lengthens. |
-| Holding | Tap RMB | **Block** (§4.3.3) |
-| Empty | Tap RMB | Nothing, plus a "need a ball to block" hint the first few times |
+| Holding | **Hold** RMB | **Block stance**: the ball is held out in front as a physical shield (§4.3.3) |
+| Holding | E | Nothing |
+| Empty | RMB | Nothing, plus a "need a ball to block" hint the first few times |
 
 This produces the game's central trade-off: **holding a ball lets you block, empty hands let you catch.**
 
 Throwing, catching, and blocking work in every movement state (run, sprint, crouch, slide, jump). They do not work while tripped, recovering, or knocked out.
 
 #### 4.3.1 Throwing
-- **Wind-up** ◆: Standard 0.25 s, Speed 0.25 s, Heavy 0.50 s (twice as long, per spec). Other players can see the wind-up animation. That tell is part of the skill.
+- **Wind-up** ◆: Standard 0.25 s, Speed 0.25 s, Heavy **0.65 s** (longer than before, balancing its extra range per Playtest 1). Other players can see the wind-up animation. That tell is part of the skill.
 - **Aim charge:** holding LMB after the wind-up for up to 1.2 s shrinks the spread cone linearly from "quick" to "aimed" (it never reaches zero, per spec). Releasing before the wind-up finishes queues the throw at the end of the wind-up.
 - **Spread cone** (half-angle) ◆: Standard quick 4.0° → aimed 1.2°. Speed quick 6.0° → aimed 0.6° (plus up to +15% speed when aimed). Heavy quick 3.0° → aimed 1.5°.
 - **Inherited velocity:** the ball inherits 50% of the thrower's horizontal velocity. Sprint-throws are stronger but less controlled.
 - **Throw origin:** hand position. Aim comes from the camera ray, corrected so that third-person camera offset doesn't let players throw from behind cover they can't see around. The server raycasts from the character's eyes.
 
 #### 4.3.2 Catching
-- Pressing LMB with empty hands (and no pickup target) starts a **catch attempt**.
+- Pressing LMB **or E** with empty hands (and no pickup target) starts a **catch attempt**. Both arms and open hands go out in front, and other players see it clearly (§4.6, §11.2).
 - **Active window** ◆: 0.35 s from the press. If a **live** ball (§4.4) enters the *catch volume* during that window, the catch succeeds. The catch volume is a sphere of radius 0.7 m centred 0.5 m in front of the chest, and the ball must be within 35° of the view direction.
 - After the window ends, holding the button keeps a "brace" pose that does **not** catch.
 - **Failed attempt cooldown:** 0.5 s before another catch attempt. This stops players spamming the button.
@@ -174,13 +180,16 @@ Throwing, catching, and blocking work in every movement state (run, sprint, crou
 - **Heavy ball:** **cannot be caught.** A catch attempt against a live heavy ball counts as a hit, so the player is knocked out.
 - **Outcome of a catch (Classic):** the thrower is knocked out, the catcher keeps the ball, and one knocked-out teammate of the catcher returns (§5.1).
 
-#### 4.3.3 Blocking
-- Tap RMB while holding a ball. Its **active window** and proximity rules match catching: 0.35 s, a block volume in front of the held ball, and a 35° view cone.
-- **Block wind-up** ◆: 0.05 s with Standard or Speed held, 0.20 s with Heavy held (per spec, "takes longer to wind up").
-- A blocked ball deflects off the held ball with physical restitution. **Deflected balls stay live** (§4.4), which makes bounce-outs possible.
-- **Speed ball** blocks are jarring (the same reaction as catching).
-- **Heavy ball cannot be blocked.** A block against a live heavy ball knocks the blocker out, and the heavy ball keeps going.
-- Block cooldown after a whiffed block: 0.4 s.
+#### 4.3.3 Blocking (physics-based, per Playtest 1)
+- **Hold RMB** while holding a ball to enter **block stance**. The ball moves from the carry position to a **shield position** held out in both hands, about 0.45 m in front of the chest. Releasing RMB returns it to carry.
+- **The block is pure physics.** In block stance, the held ball is a solid sphere. Any thrown ball that **touches it bounces off** with normal sphere-to-sphere physics (both balls' size and restitution). There's no timing window or view cone: if it touches the shield, it's blocked. If it misses the shield and touches your body, you're hit.
+- A ball that is only **casually carried** (not in block stance) is **not a shield**. Thrown balls pass it and can hit you.
+- **Raising the shield** ◆ takes 0.10 s with Standard or Speed held, and 0.25 s with Heavy held (per spec). The shield is solid only once raised.
+- **In block stance:** movement is capped at walking speed (no sprint, slide, or dash), and you can't throw. Release RMB first. There's no time limit and no stamina drain. The cost is mobility (owner-confirmed).
+- **Deflected balls stay live** (§4.4 rule 4), which makes bounce-outs possible.
+- **Speed ball** blocks are jarring: 0.3 s of camera shake and a small push back.
+- **Heavy ball vs shield** (owner-confirmed): the heavy ball **bounces off, weightily**. It keeps most of its speed and changes direction less than a light ball would. It **knocks the blocker back** (a shove of about 1.5 m) and **knocks the shield ball out of their hands** (dropped, dead). The block still saves the blocker, so it's not a knockout, and the deflected heavy ball stays live.
+- **Holding a Heavy ball as your shield** gives a bigger shield that's slower to raise. A thrown Heavy ball hitting a held Heavy ball bounces off normally.
 
 ### 4.4 Ball states and hit rules
 
@@ -188,10 +197,10 @@ Every ball carries a **state** that the server tracks and the client shows visua
 
 | State | Visual | Meaning |
 |---|---|---|
-| **Resting / Dead** | Light tint (light red / light orange / light blue) | On the ground or rolling. Harmless. Can be picked up. |
-| **Held** | Full colour in hand | Being carried |
-| **Live** | Full colour + subtle trail | Thrown, and has not yet touched the environment |
-| **Dead-fast** (Speed only) | Light orange + short trail | Has bounced off the environment but is still fast. Can trip or push but not knock out (§4.5). |
+| **Resting / Dead** | Normal ball colour, no glow (Playtest 1: balls keep their colour on the ground) | On the ground or rolling. Harmless. Can be picked up. |
+| **Held** | Normal colour in hand | Being carried |
+| **Live** | Normal colour + **glowing outline** in the ball's own colour + subtle trail | Thrown, and has not yet touched the environment. **Glow = can knock you out.** |
+| **Dead-fast** (Speed only) | Normal colour + faint short trail, no glow | Has bounced off the environment but is still fast. Can trip or push but not knock out (§4.5). |
 
 **Hit rules (Classic)** **[DECISION — confirm]:**
 1. A **live** ball that touches an opposing player's body knocks that player out.
@@ -199,26 +208,32 @@ Every ball carries a **state** that the server tracks and the client shows visua
 3. A live ball that hits a player (knocking them out) **stays live** until it touches the environment. It can knock out a second player, which is a *double knockout*.
 4. A ball deflected by a **block** stays live. If it then knocks out an *opposing* player, that's a **bounce-out**.
 5. **Friendly fire:** live balls pass *through* teammates harmlessly, so teammates never block your throws. This was changed in the tech demo; physically bouncing off teammates felt like being blocked by your own side.
-6. **Headshots** count as knockouts **[DECISION]**. Many school rules disallow them. §17 has this as an open question.
+6. **Big oofs** (a live ball hitting the head) count as knockouts, and can trigger slow motion (§4.7).
 7. **Saves** (real-dodgeball rule: a teammate catches a ball that has just hit you, before it goes dead, and cancels your knockout) are **not in v1** **[DECISION]**. They're a candidate for a later update.
 
-**Knockout reaction:** per spec, a *standard* ball knockout triggers a ragdoll with **no impact reaction**. The character just goes limp. Speed balls add a modest impulse, and Heavy balls add a dramatic one (§4.5). A knocked-out player's ragdoll stays for 2 s and then fades. The player enters the spectator/waiting state (§5.1).
+**Knockout reaction:** per spec, a *standard* ball knockout triggers a ragdoll with **no impact reaction**. The character just goes limp. Speed balls add a modest impulse, and Heavy balls add a dramatic one (§4.5). A knocked-out player's ragdoll stays for 2 s and then fades. The knocked-out player sees the **kill camera** (§4.9), then enters the spectator/waiting state (§5.1).
 
 ### 4.5 Ball types
 
 | Property ◆ | Standard (red) | Speed (orange) | Heavy (blue) |
 |---|---|---|---|
-| Diameter | 0.21 m | 0.19 m | 0.24 m |
-| Throw speed (quick → aimed) | 18 m/s | 25 → 29 m/s | 11 m/s |
+| Diameter (Playtest 1: larger) ◆ | **0.30 m** (was 0.21) | **0.27 m** (was 0.19) | **0.34 m** (was 0.24) |
+| Throw speed (quick → aimed) | 18 m/s | 25 → 29 m/s | **13.5 m/s** (was 11) |
 | Gravity scale | 1.0 | 0.8 (flatter arc) | 1.6 (steep arc) |
-| Max effective range | ~Full court | Full court | ~60% of court |
+| Max effective range | ~Full court | Full court | **~11.5 m, +50%** (was ~7.7 m). Now reaches the opposing back half. |
 | Restitution (bounciness) | 0.60 | 0.70 | 0.15 ("barely bounces") |
 | Rolling friction | Medium | Low | High |
 | Catchable | Yes | Yes (jarring, smaller window) | **No** |
-| Blockable | Yes | Yes (jarring) | **No** |
+| Blockable (physics shield, §4.3.3) | Yes | Yes (jarring) | Bounces off weightily, shoves the blocker back, and knocks the shield ball out of their hands |
 | Knockout impulse to ragdoll | None (limp) | Small | Large: faceplant, spin, or flip depending on hit zone |
 | After-bounce effect | Harmless | While speed > 12 m/s: leg hit on a sprinting/jumping player causes a **trip**. Body hit on a stable player causes a **push** of about 0.5 m. Head hit causes a **knockdown** (trip, not KO). Below 12 m/s: harmless. | Harmless, but a resting heavy ball **trips** players who run, sprint, or slide over it |
 | Other | — | Aimed throws are faster and more accurate. Unaimed throws are less accurate. | Knocks Neighborhood inflatables around (§7.3) |
+
+**Bounce ball (lime green, test ball, built 2026-09-30):**
+- Standard size, very bouncy (restitution 0.85), thrown at 17 m/s, catchable and blockable.
+- It **stays live through two floor or wall bounces**, so it can still knock a player out after bouncing. The third bounce, or rolling along the floor, makes it dead.
+- A knockout after at least one bounce is a **BANK SHOT**: +50 points and a tag in the feed.
+- One is in the default ball mix, and the menu has a "Bounce balls only" test option.
 
 **Heavy ball hit-zone reactions (cosmetic):**
 - Head: flip up and over.
@@ -233,9 +248,96 @@ A per-hit random seed adds variety. The server sends the seed so every client sh
 
 - **Third person:** over-the-shoulder, with a swappable shoulder. The camera collides with world geometry so it cannot clip through walls.
 - **Anti-peek rule:** in third person, the **server** decides visibility and throw origin from the character's eyes. The camera can still see over cover, which is exactly why **Classic FPV** exists as a mode.
-- **First person:** the player sees their own arms and ball. The camera follows the head during slides and knockdowns, with a comfort option to reduce camera roll.
+- **First person:** the player sees **their own forearms and hands** (a first-person arms view drawn in front of the camera) in every action pose. Playtest 1 found this essential, because in the demo you couldn't see yourself trying to catch or block.
+  - **Idle / moving:** hands low at the edges of the screen, bobbing with movement.
+  - **Catch stance:** both arms thrust forward with palms open toward the crosshair. The unmistakable "I'm catching" pose.
+  - **Carrying:** the ball in the right hand, lower right.
+  - **Block stance:** the ball pushed out in both hands, lower centre, partly covering the view. It's a real shield, so it should feel like one.
+  - **Wind-up and throw:** the right arm draws back out of view while the left hand points at the target, then follows through.
+  - **The camera is locked to the head (built 2026-09-30):**
+    - Sprinting leans the body forward, and the camera drops about 10 cm and moves forward with the head. There's a light running bob.
+    - When you trip, the camera locks to your falling ragdoll's head, rolling with it. It then eases back to eye height over 0.4 s as you get up.
+    - Third person follows the head in the same way.
+  - **Trip feedback:** a flash saying what happened ("TRIPPED! Ran into the wall", "KNOCKED DOWN! Speed ball", and so on), a jolt, a red hit vignette, and a **"Getting up…" progress bar** until you can move again.
+  - A comfort option to reduce camera roll comes later.
 - **Team outlines:** in Classic, teammates get a blue outline and opponents a bright red one. Ultimate has no team outlines **[DECISION]**; opponents get a subtle neutral outline for readability.
 - **Accessibility:** outline colours can be changed. The defaults avoid relying only on red/green. Blue and red are distinguishable for most colour-vision deficiencies. An optional pattern or icon overhead marks the team.
+
+### 4.7 Slow motion (Playtest 1)
+
+Slow motion slows **the whole match for everyone at once**: movement, balls, timers, and animations. The referee applies it as a time scale on each simulation step, so it works identically online. The network tick rate doesn't change.
+
+| Trigger | Chance | Duration ◆ |
+|---|---|---|
+| **Big oof:** a live ball knocks a player out by hitting the head (top ~0.3 m of the body) | **50%** | **8 s** |
+| **Target hit:** a target appears **every 90 s of play**, and someone hits it with a thrown ball | 100% | **12 s** |
+| **Setup toggle "Full slow motion"** | — | The **entire match** |
+
+- **Speed** ◆: 0.4× normal. It eases in and out over 0.3 s (real time).
+- **Target** **[DECISION]:**
+  - It's a glowing bullseye about 1 m across, hanging **above the centerline** at 4–6 m and drifting slowly side to side, so both teams have equal access.
+  - It stays up for **15 s** or until hit, with a chime and a HUD arrow when it appears.
+  - Any live ball can hit it, from either team. The ball goes dead and drops.
+  - The thrower gets **+100 Dodgecoins** (the game's currency, §6.2). This has nothing to do with winning the match: no score points.
+  - The 90 s timer counts match play time and carries across rounds. If the target is still up when a round ends, it disappears.
+- **Timers during slow motion:** in-game timers slow down with everything else (wind-ups, trips, revive delay). The **10-minute match clock counts real time** **[DECISION]**.
+- **Stacking:** a trigger during slow motion extends it, up to whichever end is later. In a **Full slow motion** match, the random triggers are off, since the match is already slow **[DECISION]**.
+- **Presentation:** audio pitch and tempo drop, a light desaturation (colour stays at **80%** saturation, per Playtest 2) and a vignette, a "SLOW-MO" banner with a countdown, and a whoosh on entry and exit.
+- **Bots** see the same slowed world, so their reactions stay fair.
+
+### 4.8 Playtest 1 changes (owner feedback, 2026-09-28)
+
+| # | Change | Where specified | Status |
+|---|---|---|---|
+| P1 | Larger balls (Standard 0.30 m, Speed 0.27 m, Heavy 0.34 m) | §4.5 | ✅ Built, awaiting playtest |
+| P2 | **E** picks up and catches, in addition to left click | §4.1, §4.3 | ✅ Built, awaiting playtest |
+| P3 | **A/D + Space** sidestep dash | §4.1, §4.2 | ✅ Built, awaiting playtest |
+| P4 | Heavy ball: longer wind-up (0.65 s), +50% range (13.5 m/s) | §4.3.1, §4.5 | ✅ Built, awaiting playtest |
+| P5 | First-person arms and hands. Proper voxel hands on all characters, with open (catch), grip (carry/shield) and relaxed poses. | §4.6, §11.2 | ✅ Built, awaiting playtest |
+| P6 | Physics-based blocking: hold RMB for a shield stance, and thrown balls bounce off the held ball | §4.3.3 | ✅ Built, awaiting playtest |
+| P7 | Balls keep their colour on the ground. Thrown (live) balls get a glowing outline. | §4.4 | ✅ Built, awaiting playtest |
+| P8 | Slow motion: 50% on a Big oof KO (8 s), 12 s on a target hit (target every 90 s), and a "Full slow motion" setup toggle | §4.7, §9.2 | ✅ Built, awaiting playtest |
+
+### 4.9 Playtest 2 changes (owner feedback, 2026-09-28)
+
+| # | Change | Status |
+|---|---|---|
+| Q1 | **"Headshot" is now "Big oof"** everywhere: rules, HUD, feed, code. The mechanic is unchanged. | ✅ Built, awaiting playtest |
+| Q2 | **"Dodge"** appears only when a live opposing ball passes within 0.6 m of your body and misses you. A missed catch attempt or a stray E press shows nothing (owner correction). | ✅ Built, awaiting playtest |
+| Q3 | **Tab scoreboard** (hold Tab) | ✅ Built, awaiting playtest |
+| Q4 | **Knockout feed**, top right, fading in and out: `Player [icon] Player` | ✅ Built, awaiting playtest |
+| Q5 | **Icons** for thrown-ball knockouts, Big oofs, and catches | ✅ Built, awaiting playtest |
+| Q6 | **Slow motion desaturation reduced:** colour stays at 80% saturation (was 50%) | ✅ Built, awaiting playtest |
+| Q7 | **Kill camera:** a few seconds of third person, locked on your own character, when you're knocked out | ✅ Built, awaiting playtest |
+
+**Tab scoreboard (Q3).** Hold **Tab** to show a centred panel. It replaces the "Scoreboard" placeholder in §4.1.
+- Header: round score (Blue x : y Red) and round number.
+- One column per team, listing every player in the match. Bots are tagged `[BOT]`, and you're highlighted.
+- Each row: name, status (**In**, **Out · #n in the return queue**, **Returning**, or **Tripped**), knockouts, catches, blocks, in-match score (§6.1), and Dodgecoins earned this match.
+- Rows are sorted by score. Knocked-out players are dimmed.
+- Mute and report buttons belong here later (§9.3), once chat and accounts exist.
+
+**Knockout feed (Q4, Q5).** It replaces the current text feed in the top-right corner.
+- Each entry reads **`Thrower [icon] Knocked-out player`**. Names are in team colours: blue for your team, red for the opponents.
+- Entries fade in, stay about 5 s, then fade out. At most 5 are shown, newest at the bottom.
+- Icons:
+
+| Event | Icon |
+|---|---|
+| Thrown-ball knockout | A ball, drawn in the thrown ball's colour (red, orange or blue) |
+| **Big oof** | The ball icon plus a small "impact star on a head" badge |
+| **Catch** | Two hands closing on a ball. Reads `Catcher [catch icon] Thrower`, because the thrower is the one out. |
+| Crossed the centerline | A line icon and just the player's name |
+| Bounce-out / double | Small tags after the entry (`BOUNCE-OUT`, `DOUBLE`) |
+| Target hit | The target icon and `+100` |
+
+- Trips, "a target appeared" and similar notices leave the feed. They move to the centre banner or the status line, so the feed stays about knockouts **[DECISION]**.
+- Icons are small inline SVGs, so they stay crisp and need no image downloads.
+
+**Kill camera (Q7).**
+- When you're knocked out, the camera switches to **third person** (even if you were in first person), **locked to your own character**, for **3 s** ◆. You watch your ragdoll fly.
+- It then moves to the normal spectator view (§5.1, §9.4). If you were in first person, first person comes back when you return to play.
+- The kill camera never shows the thrower's position, so it doesn't reveal extra information. It's purely comedy.
 
 ---
 
@@ -249,9 +351,9 @@ A per-hit random seed adds variety. The server sends the seed so every client sh
 - **Round start:** balls sit on the centerline (count scales with player count, §18.1). Players spawn at their back line. There's a 3-2-1 countdown, then "Dodge!" and players rush for the balls. A ball on the centerline can be picked up from either side, but the player's root must stay on their own side.
 - **Round win:** every player on the other team is knocked out.
 - **Revive on catch:** when a player catches a ball, the **earliest-knocked-out** teammate returns (first out, first in) **[DECISION]**. The returning player spawns at their team's back line after 1.0 s with 1.0 s of spawn protection. Spawn protection breaks early if they pick up or throw a ball.
-- **Knocked-out players:** they spectate (free camera over their team's half, or follow-cam on a teammate) and see their position in the return queue. They keep text chat.
+- **Knocked-out players:** after the kill camera (§4.9), they spectate (free camera over their team's half, or follow-cam on a teammate) and see their position in the return queue. They keep text chat.
 - **Anti-stall:**
-  - **Possession clock:** a held ball starts pulsing after 8 s and **goes dead in the holder's hand at 10 s**, dropping at their feet. The pulsing warns the holder first.
+  - *(The possession clock, which dropped a ball held for 10 s, was removed on 2026-09-30 at the owner's request. Players can hold a ball indefinitely, for example to shield with it.)*
   - **Round overtime:** after 2:30 in a round, the court's back boundaries slowly move inward. In Classic Gym this is shown as the out-of-bounds lines advancing, which squeezes players toward the centerline. In Hypergym it happens through the dynamic line system.
 - **Match end:** first team to **4 round wins** (best of 7), or **10:00** of match time. If time runs out, the team with more round wins wins. If round wins are tied, the current round finishes with **sudden death**: the next knockout of either side ends it **[DECISION]**.
 - **Round transition:** 5 s scoreboard and highlight, then reset.
@@ -307,7 +409,7 @@ Identical to Classic, except that the camera is locked to first person. It gets 
 | Last One Standing clutch | +150 | You're the last player on your team and you win the round *(proposed)* |
 | Centerline KO | 0 | An opponent crossing the line gets no credit, except an assist to whoever tripped or pushed them across |
 
-A kill feed shows these events with icons, and the round/match summary shows a highlight tally.
+The **knockout feed** (§4.9) shows these events with icons, **Tab** shows the full scoreboard (§4.9), and the round/match summary shows a highlight tally.
 
 ### 6.2 Dodgecoins
 
@@ -363,6 +465,31 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - Players spawn at spread-out pads. Balls spawn at pads that refill in rotation.
 - Sponsor billboards on buildings are prime banner slots (§12).
 
+### 7.5 Full Court (default arena, 2026-09-30; previously "Offset Court")
+The **default arena**, sized like a basketball court. An NBA court is 28.7 × 15.2 m.
+- **Hall:** 42 × 28 m, with a **30 × 18 m court**. It was widened from 30 × 15 m and has no obstacles, per playtest feedback.
+- **Centerline:** a **classic straight line** (owner decision, 2026-09-30). The stepped line below is kept as engine support for Hypergym and is tested with a test-only arena.
+- **Floor markings:** faint basketball markings (centre circle, keys, free-throw circles, three-point arcs) sit under the brighter dodgeball lines. They're decoration only.
+- **Stepped centerline (previous version):** for z > 2.5 the line sits at x = +2.5, so Blue's half reaches 2.5 m into Red's side. For z < −2.5 it sits at x = −2.5, giving Red the same reach into Blue's side. A diagonal joins the two steps. Both teams get exactly the same area, which a test checks.
+- **Bleachers:** along one side, used for spectating (§9.4).
+- **Engine support:** arenas can define the centerline as a polyline. The centerline rule, ball spawns, the target, bots and the floor markings all follow the line.
+- **Earlier version:** an "Offset Court" with ten chest-high walls tested cover. Its walls were removed after playtesting. Bots still steer along walls, which the Hypergym work will need.
+
+**Fixed: wall flipping and trip loops (found in playtest, both arenas).**
+- **Symptom:** players and bots near walls flipped violently, and someone who got up against a wall kept tripping again and again.
+- **Causes and fixes:**
+  1. Any fast wall contact counted as "sprinting into a wall", and there was no recovery window. Now only a real sprint trips, and getting up gives **2 s of trip immunity**.
+  2. Bots ran straight at walls. They now steer along them.
+  3. Ragdolls could start partly inside a wall and got shoved out violently. They now start at least 0.55 m clear of walls.
+  4. Ragdoll part masses were wildly unequal: hands about 300× lighter than the torso. That made the joint solver unstable, so limbs whipped and spun. Parts now have realistic masses, hands and feet are welded to their limbs, and the solver runs more iterations.
+  5. The pull that keeps a tripped ragdoll with its player could build up speed. It's now capped.
+  6. Hard speed and spin caps apply to every ragdoll part (12 m/s, 14 rad/s).
+- **Result:**
+  - Bot trip loops dropped from 25 per 3 minutes to 0.
+  - Bot wall trips dropped from 55 to about 1.
+  - In the browser, 1.5 s after a fall every body is at rest (below 0.6 m/s).
+  - Regression tests guard the trip loop and wall clearance.
+
 ---
 
 ## 8. Bots and Practice Mode
@@ -408,7 +535,7 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 ### 9.2 Pre-match lobby (social space)
 - A small walkable "locker room / gym foyer" map. Players can run, slide, jump, and throw practice balls at each other with **no knockouts**, only physics fun. The ragdoll from a hit is limited to a short stagger so it doesn't become harassment.
 - **Team swap:** stand on the Blue or Red team pad. Team sizes are capped at ±1 of each other unless the host allows uneven teams.
-- **Host panel:** mode, arena, and ball mix, plus start and kick. Kicking is available only in private rooms, with a vote-kick in public rooms (later).
+- **Host panel:** mode, arena, ball mix, and the **Full slow motion** toggle (§4.7), plus start and kick. Kicking is available only in private rooms, with a vote-kick in public rooms (later).
 - **Show-off:** each player's uniform is visible, and a mirror wall lets players see themselves.
 - **Start:** the host clicks Start in private rooms. Public rooms auto-start when 2+ humans are ready, or 45 s after the first human arrives. Bots fill the rest.
 - Text chat is active here too (accounts only).
@@ -421,6 +548,12 @@ Every arena ships with **authoring metadata** (§14.3): play bounds, team zones,
 - A **quick-chat wheel** of pre-written, safe messages ("Nice catch!", "Ball!", "Cover me") works for **everyone, including guests** **[DECISION]**. It improves teamwork without moderation risk.
 
 ### 9.4 Spectating
+- **Bleachers (built 2026-09-30):**
+  - After the kill camera (your ragdoll lies there for 3 s), a knocked-out player **appears seated in the bleachers**. Blue sits on the Blue end and Red on the Red end, both facing the court.
+  - Other players see you sitting there.
+  - You **can't move, only look around**, in first or third person (V toggles).
+  - Your view starts facing the court.
+  - When a teammate's catch brings you back, you return to the court as normal.
 
 *(Voice chat was removed in v0.3 by owner decision. The quick-chat wheel and text chat cover communication.)*
 
@@ -522,6 +655,7 @@ Role-gated pages at `/admin`, served by the same Worker.
 
 ### 11.2 Character rig
 - **One shared skeleton** with about 15 bones: pelvis, spine, chest, head, and for each side upper arm, forearm, hand, thigh, shin, and foot.
+- **Hands (Playtest 1):** each hand is a small voxel assembly with a palm, a finger block (hinged at the knuckles), and a thumb. It has three poses: **open** (catch stance, palm facing the ball), **grip** (carrying or shielding, fingers wrapped around the ball), and **relaxed**. Hands must read clearly at a distance, because a catch attempt is a tell other players react to.
 - Each body segment is a rigid voxel mesh parented to one bone. There is no skinned mesh, which is cheap to render and trivially ragdolls.
 - **Ragdoll:** each segment is a physics body (capsule or box) linked by joints with angular limits. The limits are tuned for comedy but still anatomically plausible.
 - **Animation:** a small procedural and keyframed set: idle, run, sprint, crouch, slide, jump, wind-up (per ball weight), throw, catch stance, catch success, block, jarred, get-up, victory, and defeat. **Active ragdoll blending** is a stretch goal: a partial physics reaction layered on animation for pushes and jarring.
@@ -858,6 +992,22 @@ The message rate is also typical. Competitive shooters exchange 20–128 updates
 | 100–180 ms | Proceed. The netcode above (forward-predicted balls, defender-favoured catches) is built for this. Tune catch and block windows wider. Also add **Local Host mode** (below) for in-school play. |
 | > 180 ms or unstable | Make **Local Host mode** the default for school play, with Cloudflare rooms for worldwide play |
 
+- **Result (2026-10-19, owner, Shenzhen, Firefox on Mac):**
+
+| Measure | Value |
+|---|---|
+| Routing | Location hint `apac`. Edge **KIX (Osaka, JP)**, room KIX (not Hong Kong, but close) |
+| WebSocket RTT | median **68 ms**, p95 101 ms, max 364 ms, jitter 9 ms, loss 0.0% (584 pings) |
+| Snapshots | 30.0/s, gap p95 48 ms, down 8.7 KB/s, up 1.0 KB/s |
+| Room (DO) | 60 ticks/s, worst timer gap 16 ms |
+| HTTP edge | median 107 ms |
+
+- **Decision: row 1, proceed as designed.** Cloudflare rooms serve school play. Local Host mode is **not built** in Phase 2; it stays documented below as a fallback in case later measurements change the picture.
+- **Follow-ups (not blocking):**
+  - Repeat the test from the other Shenzhen location (school vs home) and at a busy time of day (after school, evenings) to confirm the median stays ≤ 100 ms.
+  - The single 364 ms spike means occasional hitches. Snapshot interpolation and reconnect handling in Phase 2 must ride out isolated spikes of ~400 ms without dropping the player.
+  - The `*.workers.dev` comparison is no longer needed, because the custom domain already performs well.
+
 - **Local Host mode (fallback, cheap to add because of the pure sim):**
   - One player's browser runs `src/sim` as the referee, the same code as the DO.
   - The other players connect **peer-to-peer over WebRTC data channels**. The `GameRoom` DO only does matchmaking and connection setup. A relay (TURN) service is a backup for networks that block direct connections.
@@ -917,7 +1067,7 @@ export const speedBall: BallDef = {
 ```
 - **Arenas:** an `ArenaDef` pointing at a glTF scene plus a metadata file (bounds, zones, line definition, spawns, banner slots).
 - **Uniforms:** `UniformDef` with ID, voxel file reference, palette, rarity, price, and release/retire dates.
-- **Modes:** `ModeDef` with rules parameters (round count, timers, respawn, possession clock), so variants like "Heavy-only Friday" become configuration.
+- **Modes:** `ModeDef` with rules parameters (round count, timers, respawn), so variants like "Heavy-only Friday" become configuration.
 - **Validation:** a CI step checks every definition, including unique IDs, referenced assets that exist, banner slot aspect ratios, and a correct centerline definition.
 
 ### 14.3 Arena authoring
@@ -960,15 +1110,15 @@ export const speedBall: BallDef = {
 | Item | Status | Result |
 |---|---|---|
 | Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
-| Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, possession clock, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
+| Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
 | **S1** performance on an M1 MacBook Air | ⏳ **Owner to run** | Open the demo, choose "8v8 stress test", and read the fps line at bottom-left. Download size: 150 KB gzip for the menu, plus 1.7 MB for physics loaded on Play. |
-| **S2** latency from Shenzhen | ⏳ **Owner to run** after `npm run deploy` | `/latency.html` → Full test. Verified locally: 30 updates/s, ~8.7 KB/s down, ~1.1 KB/s up, 60 room ticks/s. |
-| **S3** referee loop in a Durable Object | ✅ Locally / ⏳ on Cloudflare | `npm run bench`: 8v8 averages 0.075 ms per tick. In `wrangler dev`, the DO holds 60 ticks/s with a worst timer gap of ~25 ms. The Cloudflare numbers come from the same latency page. Rapier-in-DO wasn't needed. |
+| **S2** latency from Shenzhen | ✅ **Done (2026-10-19)** | Edge and room in KIX (Osaka). Median RTT **68 ms**, p95 101 ms, jitter 9 ms, 0% loss; 30 updates/s at 8.7 KB/s down. **Verdict: proceed as designed (§13.10, row 1); no Local Host mode.** A repeat from the other Shenzhen location at a busy hour is a non-blocking follow-up. |
+| **S3** referee loop in a Durable Object | ✅ Done | `npm run bench`: 8v8 averages 0.075 ms per tick. On Cloudflare (KIX), the DO held 60 ticks/s with a worst timer gap of 16 ms. Rapier-in-DO wasn't needed. |
 | **S4** netcode feel at 150 ms | ⏭ Moved to Phase 2 | It needs the prediction layer. The binary snapshot codec (~300 bytes at 8v8) is already built and tested. |
 
 **Tuning notes from building it:**
 - Bots need the ballistic aim solver (`aimAt`). Straight-line aim misses badly at 10 m+.
-- Catching is timing-sensitive, as intended. A press about 0.2 s before arrival catches, and one pressed on release whiffs (both covered by tests).
+- Catching is timing-sensitive, as intended. A press about 0.2 s before arrival catches, and one pressed on release misses (both covered by tests).
 
 #### Phase 1: "Feel" Prototype, offline (Weeks 3–7)
 **Goal:** the core verbs are fun in single player against bots.
@@ -980,6 +1130,9 @@ export const speedBall: BallDef = {
 - A minimal HUD (held ball, stamina, catch-window feedback) and placeholder audio.
 - Practice mode in a Web Worker.
 
+- **Playtest 1 changes P1–P8** (§4.8): built.
+- **Playtest 2 changes Q1–Q7** (§4.9): built.
+
 **Exit criteria:** 5+ students play it and ask to play again. The catch/block feel is tuned. There's a gameplay video of the owner's favourite moments.
 
 #### Phase 2: Networked Core (Weeks 8–12)
@@ -990,11 +1143,11 @@ export const speedBall: BallDef = {
 - The load-test harness and netcode test harness, plus a capacity measurement.
 
 **Exit criteria:** an 8v8 playtest (with bots filling in) at school feels fair, and there are no "I caught it on my screen" complaints above a small threshold. DO tick CPU p99 stays under 4 ms per room.
-- **If spike S2 said so:** Local Host mode (WebRTC peer-to-peer with the same sim) is built in this phase.
+- **Local Host mode is not built in this phase:** spike S2 measured a 68 ms median from Shenzhen (§13.10, row 1).
 
 #### Phase 3: Classic Complete → **ALPHA** (Weeks 13–16)
 **Goal:** a complete Classic match loop, playable by students.
-- Rounds, revive-on-catch, the return queue, spectating, possession clock, overtime, match end, and sudden death.
+- Rounds, revive-on-catch, the return queue, spectating, overtime, match end, and sudden death.
 - Scoring, kill feed, special KOs, and the scoreboard and end-of-match screens.
 - **Speed and Heavy balls** with their full effects.
 - The Classic FPV mode, the settings menu (sensitivity, FOV, keybinds, graphics presets, audio), and the quick-chat wheel.
@@ -1083,7 +1236,7 @@ These dates assume part-time owner availability and include normal school holida
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| R1 | **Latency from Shenzhen to Cloudflare is high or unstable.** Standard Cloudflare plans don't serve from the mainland and can route via distant PoPs. | **High** | Critical | Phase 0 spike S2 with a decision rule (§13.10), netcode built for 100–180 ms, and the **Local Host mode** fallback for in-school play |
+| R1 | **Latency from Shenzhen to Cloudflare is high or unstable.** Standard Cloudflare plans don't serve from the mainland and can route via distant PoPs. | Low *(was High; S2 measured a 68 ms median via KIX, 2026-10-19)* | Critical | Repeat the test at busy hours and from the other location; netcode built for 100–180 ms; the **Local Host mode** fallback stays documented (§13.10) |
 | R2 | **Netcode feels unfair**, especially catches and blocks | High | Critical | Forward-predicted balls, defender-favoured bounded rewind, the Phase 2 harness, and early playtests from Shenzhen |
 | R3 | **Custom gameplay physics is too limited** (inflatables, ramps, edge cases) | Medium | Medium | Keep the physics needs narrow by design. Rapier-in-DO is the tested escape hatch (spike S3), and headless bot matches catch stuck or tunnelling balls. |
 | R4 | **Durable Object limits or tick jitter** (single thread, timer precision, eviction) | Medium | High | Spike S3 measures it. Keep the sim cheap. Clients tolerate jitter through interpolation, and reconnect-to-seat exists (the Flashstone pattern). |
@@ -1123,7 +1276,7 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 |---|---|---|---|
 | Q-T9 | ✅ | Address: **`duoshan.contrapaul.com`** confirmed. | — |
 | Q-T10 | ✅ | Workers Paid plan: **already in place.** Expected extra cost is about $3/month at school scale, and about $17 if the game spreads widely (§13.9). | — |
-| Q-T11 | A | Latency test from school and home in Shenzhen: **owner will run it on return to Shenzhen.** Building the test page is the first Phase 0 task. | — |
+| Q-T11 | ✅ | Latency test from Shenzhen: **run 2026-10-19.** Median 68 ms via KIX (Osaka), so proceed as designed (§13.10). A repeat from the other location at a busy hour is a non-blocking follow-up. | — |
 | Q-T12 | B | If Shenzhen latency is poor, is **Local Host mode** (one student's browser referees, and classmates connect peer-to-peer) acceptable for in-school play? | Yes, as a fallback |
 | Q-T13 | B | Should the game be playable during school hours, or is it after-school/home only? | Both |
 | Q-T8 | C | Is mobile/tablet (touch) support ever desired? | Out of scope for 1.0 |
@@ -1131,15 +1284,21 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 ### 17.2 Gameplay rules
 | ID | Pri | Question | Proposed default |
 |---|---|---|---|
-| Q-G1 | A | Do **headshots** count as knockouts? | Yes |
+| Q-G1 | ✅ | Big oofs (head hits) count as knockouts, and can trigger slow motion. | — |
 | Q-G2 | B | Does a ball that hits one player **stay live** and knock out a second (double KO)? Do **deflected (blocked)** balls stay live (bounce-outs)? | Yes to both |
 | Q-G3 | B | Should the real-dodgeball **"save"** rule exist (a teammate catches a ball that just hit you)? | Not in v1 |
 | Q-G4 | B | Max balls held at once: 1 or 2? | 1 |
 | Q-G5 | B | **Ultimate:** is the Brawl (respawns) → Last Stand (no respawns) reconciliation right? Or should it be pure deathmatch, or pure last-man-standing rounds? | Brawl 8 min + Last Stand 2 min |
 | Q-G6 | B | Do bots fill to **6 total participants** (3v3)? | Yes |
-| Q-G7 | B | Are you happy with the possession clock (10 s) and round overtime (shrinking court) as anti-stall rules? | Yes |
+| Q-G7 | ✅ | Anti-stall: **no possession clock**, so players may hold a ball indefinitely (owner, 2026-09-30). Round overtime (shrinking court) remains the planned anti-stall rule. | — |
 | Q-G8 | B | Match timeout tiebreak: is sudden death OK? | Yes |
 | Q-G9 | C | Which revive order: first-out-first-in, or the catcher chooses? | First out, first in |
+| Q-G10 | ✅ | Big oof slow motion: **8 s** (target: 12 s). | — |
+| Q-G11 | ✅ | Block stance: walk speed, no sprint, no stamina drain. | — |
+| Q-G12 | ✅ | Heavy vs shield: bounces off weightily, shoves the blocker back, and knocks the shield ball out of their hands. | — |
+| Q-G13 | ✅ | Glow colour = the ball's own colour. | — |
+| Q-G14 | ✅ | Target reward: +100 **Dodgecoins** to the thrower, not score points. | — |
+| Q-G15 | ✅ | Ball sizes 0.30 / 0.27 / 0.34 m: try them, then retune after playtesting. | — |
 
 ### 17.3 Social, safety, and school policy
 | ID | Pri | Question | Proposed default |
@@ -1175,18 +1334,20 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Crouch speed | 2.2 m/s |
 | Jump apex | 0.6 m |
 | Slide | 8.0 m/s start, 0.8 s, cooldown 1.0 s |
+| Sidestep dash | ~2.5 m over 0.2 s, cooldown 0.8 s, 0.4 s stamina |
 | Trip duration | 1.2–2.0 s + 0.6 s get-up |
 | Collision trip threshold | 6 m/s relative speed |
-| Wall trip threshold | ≥ 6 m/s, within 30° of the wall normal |
+| Wall trip threshold | a real sprint (not dash, slide or shove) at ≥ 6 m/s, within 30° of the wall normal |
+| Trip immunity after getting up | 2 s |
 | **Ball handling** | |
 | Pickup range / time | 1.6 m / 0.15 s |
-| Throw wind-up (Std/Spd/Hvy) | 0.25 / 0.25 / 0.50 s |
+| Throw wind-up (Std/Spd/Hvy) | 0.25 / 0.25 / 0.65 s |
+| Ball diameter (Std/Spd/Hvy) | 0.30 / 0.27 / 0.34 m |
+| Heavy throw speed | 13.5 m/s (range ~11.5 m) |
 | Max aim charge | 1.2 s |
 | Catch window / cooldown | 0.35 s / 0.5 s |
 | Catch volume / view cone | 0.7 m / 35° (Speed ball: 0.6 m / 30°) |
-| Block window / cooldown | 0.35 s / 0.4 s |
-| Block wind-up (holding Std or Spd / holding Hvy) | 0.05 / 0.20 s |
-| Possession clock | warn 8 s, dead at 10 s |
+| Block | Physics shield while RMB held; raise time 0.10 s (Std/Spd) / 0.25 s (Hvy); shield 0.45 m in front of chest; walk speed while raised |
 | **Balls per Classic match** (by total players) | 6 players: 4 balls; 10 players: 6 balls; 16 players: 8 balls. Default mix: 60% Standard, 25% Speed, 15% Heavy. |
 | **Rules** | |
 | Classic match | first to 4 rounds, or 10:00 |
@@ -1196,6 +1357,13 @@ Priority **A** = needed before or during Phase 0. **B** = needed before the phas
 | Ultimate phases | Brawl 8:00, Last Stand 2:00 |
 | Dynamic line warning / grace | 3 s / 1.5 s |
 | Inflatable respawn | 30 s |
+| **Slow motion** | |
+| Time scale / ease | 0.4× / 0.3 s |
+| Big oof trigger | 50% chance, 8 s |
+| Slow motion colour | 80% saturation, plus vignette |
+| Kill camera | 3 s, third person, locked on your own character |
+| Knockout feed | each entry fades in 0.2 s, holds 5 s, fades out 0.6 s; max 5 entries |
+| Target | every 90 s of play, up 15 s, 12 s of slow motion on hit, +100 Dodgecoins to the thrower |
 
 ### 18.2 Epic backlog (for issue tracking)
 
@@ -1225,7 +1393,7 @@ Each epic becomes a GitHub milestone/label. Stories are sized S (< 1 day of agen
 | E20 Banners | slots in client (M), campaign admin (M), manifest delivery (S) | 6 |
 | E21 Audio | audio engine + mixer (M), placeholder set (S), owner recording integration (M) | 1, 7 |
 | E22 Ops | DO metrics + telemetry endpoint (M), latency probe page (S), usage/cost alerts (S), load test (M) | 0, 2, 7 |
-| E23 Local Host mode (conditional) | host-side referee in Web Worker (M), WebRTC data channels + DO signalling (M), host migration or graceful end (M) | 2 |
+| E23 Local Host mode (conditional; **not needed** after S2, kept as a fallback) | host-side referee in Web Worker (M), WebRTC data channels + DO signalling (M), host migration or graceful end (M) | 2 |
 
 ### 18.3 Glossary
 - **Live ball:** a thrown ball that hasn't touched the environment yet. It can knock players out.

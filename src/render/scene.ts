@@ -1,6 +1,6 @@
 /** Greybox Classic Gym scene: floor with court lines, walls, bleachers, banner slots, lights. */
 import * as THREE from 'three';
-import type { ArenaDef } from '../sim/arena';
+import { centerlineX, type ArenaDef } from '../sim/arena';
 
 export type Quality = 'high' | 'low';
 
@@ -29,9 +29,19 @@ function courtTexture(arena: ArenaDef): THREE.CanvasTexture {
   const Z = (z: number) => (z - minZ) * ppm;
   const { halfLength: L, halfWidth: W } = arena.court;
   g.fillStyle = 'rgba(40,90,170,0.25)';
-  g.fillRect(X(-L), Z(-W), L * ppm, 2 * W * ppm);
+  // Each team's half, following the (possibly stepped) centerline.
+  const zs = [-W, ...(arena.centerline ?? []).map((p) => p.z).filter((z) => z > -W && z < W), W];
+  const half = (edge: number) => {
+    g.beginPath();
+    g.moveTo(X(edge), Z(-W));
+    for (const z of zs) g.lineTo(X(centerlineX(arena, z)), Z(z));
+    g.lineTo(X(edge), Z(W));
+    g.closePath();
+    g.fill();
+  };
+  half(-L);
   g.fillStyle = 'rgba(190,40,40,0.25)';
-  g.fillRect(X(0), Z(-W), L * ppm, 2 * W * ppm);
+  half(L);
   g.strokeStyle = '#ffffff';
   g.lineWidth = 5;
   g.strokeRect(X(-L), Z(-W), 2 * L * ppm, 2 * W * ppm);
@@ -39,10 +49,42 @@ function courtTexture(arena: ArenaDef): THREE.CanvasTexture {
   for (const x of [-L / 3, L / 3]) {
     g.beginPath(); g.moveTo(X(x), Z(-W)); g.lineTo(X(x), Z(W)); g.stroke();
   }
+  if (arena.basketballLines) {
+    // Faint basketball markings (decoration only): centre circle, keys, free-throw
+    // circles and three-point arcs, under the brighter dodgeball lines.
+    g.save();
+    g.strokeStyle = 'rgba(255,255,255,0.4)';
+    g.lineWidth = 3;
+    const circle = (x: number, z: number, r: number, a0 = 0, a1 = Math.PI * 2) => {
+      g.beginPath(); g.arc(X(x), Z(z), r * ppm, a0, a1); g.stroke();
+    };
+    circle(0, 0, 1.8);
+    for (const s of [-1, 1]) {
+      const base = s * L;
+      const hoop = s * (L - 1.6);
+      g.strokeRect(Math.min(X(base), X(base - s * 5.8)), Z(-2.45), 5.8 * ppm, 4.9 * ppm); // the key
+      circle(base - s * 5.8, 0, 1.8); // free-throw circle
+      // Three-point line: straight along the sides, then an arc around the hoop.
+      const r = 6.75;
+      const zc = Math.min(W - 0.9, r);
+      const dx = Math.sqrt(Math.max(0, r * r - zc * zc));
+      for (const z of [-zc, zc]) {
+        g.beginPath(); g.moveTo(X(base), Z(z)); g.lineTo(X(hoop - s * dx), Z(z)); g.stroke();
+      }
+      const a = Math.atan2(zc, dx);
+      if (s < 0) circle(hoop, 0, r, -a, a);
+      else circle(hoop, 0, r, Math.PI - a, Math.PI + a);
+    }
+    g.restore();
+  }
   // The centerline.
   g.strokeStyle = '#ffdd33';
   g.lineWidth = 10;
-  g.beginPath(); g.moveTo(X(0), Z(-W - 0.5)); g.lineTo(X(0), Z(W + 0.5)); g.stroke();
+  g.beginPath();
+  g.moveTo(X(centerlineX(arena, -W)), Z(-W - 0.5));
+  for (const z of zs) g.lineTo(X(centerlineX(arena, z)), Z(z));
+  g.lineTo(X(centerlineX(arena, W)), Z(W + 0.5));
+  g.stroke();
   g.fillStyle = 'rgba(255,255,255,0.35)';
   g.font = `bold ${ppm * 1.4}px sans-serif`;
   g.textAlign = 'center';
@@ -86,13 +128,13 @@ export function buildGym(scene: THREE.Scene, arena: ArenaDef, quality: Quality):
   ceiling.position.set(0, height, 0);
   scene.add(ceiling);
 
-  const colors: Record<string, number> = { wall: 0xd9d4c7, bleacher: 0x6b7a8f, stage: 0x8a5a3c, obstacle: 0x999999 };
+  const colors: Record<string, number> = { wall: 0xd9d4c7, bleacher: 0x6b7a8f, stage: 0x8a5a3c, obstacle: 0x2f5d8a };
   for (const b of arena.boxes) {
     const size = new THREE.Vector3(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), new THREE.MeshLambertMaterial({ color: colors[b.kind] }));
     mesh.position.set(b.min.x + size.x / 2, b.min.y + size.y / 2, b.min.z + size.z / 2);
     mesh.receiveShadow = b.kind !== 'wall';
-    mesh.castShadow = b.kind === 'bleacher' || b.kind === 'stage';
+    mesh.castShadow = b.kind !== 'wall';
     scene.add(mesh);
   }
   // Wall stripe + banner slots.
@@ -124,9 +166,10 @@ export function buildGym(scene: THREE.Scene, arena: ArenaDef, quality: Quality):
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.position.set(-6, 14, 5);
   sun.castShadow = quality === 'high';
-  sun.shadow.mapSize.set(2048, 2048);
   const cam = sun.shadow.camera;
-  cam.left = -15; cam.right = 15; cam.top = 10; cam.bottom = -10; cam.near = 1; cam.far = 40;
+  // Shadow frustum covers the whole hall, whatever its size.
+  cam.left = minX - 1; cam.right = maxX + 1; cam.top = maxZ + 1; cam.bottom = minZ - 1; cam.near = 1; cam.far = 60;
+  sun.shadow.mapSize.set(maxX - minX > 30 ? 4096 : 2048, maxX - minX > 30 ? 4096 : 2048);
   sun.shadow.bias = -0.0005;
   scene.add(sun);
 }

@@ -44,10 +44,33 @@ button.secondary { background: #3a4456; color: var(--ink); }
   background: conic-gradient(var(--accent) var(--p, 0%), transparent 0); -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px); mask: radial-gradient(circle, transparent 22px, #000 23px); }
 #bottom { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); text-align: center; width: 320px; }
 #held { font-weight: 800; letter-spacing: 1px; margin-bottom: 6px; font-size: 14px; opacity: 0.9; }
-#held.ball-standard { color: #ff5a5a; } #held.ball-speed { color: #ff9a3c; } #held.ball-heavy { color: #6f95ff; }
-#held.warn { animation: blink 0.25s infinite alternate; }
-@keyframes blink { to { opacity: 0.2; } }
+#held.ball-standard { color: #ff5a5a; } #held.ball-speed { color: #ff9a3c; } #held.ball-heavy { color: #6f95ff; } #held.ball-bounce { color: #9be52f; }
 .bar { height: 6px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
 #stamina { height: 100%; background: #7cff7c; }
 #perf { position: absolute; bottom: 8px; left: 10px; font: 12px ui-monospace, monospace; opacity: 0.75; }
 #help { position: absolute; bottom: 70px; right: 16px; max-width: 360px; background: var(--panel); padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; text-shadow: none; }
+#status { position: absolute; bottom: 62px; width: 100%; text-align: center; font-size: 14px; font-weight: 700; color: var(--accent); }
+#coins { position: absolute; top: 64px; left: 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
+/* Slow motion: desaturate and vignette (§4.7). */
+canvas#game { transition: filter 0.3s; }
+body.slowmo canvas#game { filter: saturate(0.8) contrast(1.05); }
+body.slowmo #hud::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55)); }
+#feed div { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+#feed .ico { vertical-align: middle; filter: drop-shadow(0 1px 2px #000); }
+#scoreboard { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); width: min(920px, calc(100vw - 32px)); background: var(--panel); border-radius: 10px; padding: 14px 18px; text-shadow: none; }
+.sb-head { text-align: center; font-weight: 700; margin-bottom: 10px; opacity: 0.85; }
+.sb-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 700px) { .sb-teams { grid-template-columns: 1fr; } }
+#scoreboard h3 { margin: 0 0 6px; font-size: 16px; }
+#scoreboard table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#scoreboard th { text-align: left; font-weight: 600; opacity: 0.6; padding: 3px 4px; }
+#scoreboard td { padding: 4px; border-top: 1px solid #2c3444; }
+#scoreboard td.name small { opacity: 0.55; }
+#scoreboard tr.dim td { opacity: 0.45; }
+#scoreboard tr.me td { color: var(--accent); }
+#scoreboard td { white-space: nowrap; }
+/* Took a hit: red vignette pulse; recovering: progress bar (§4.9). */
+#hurt { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 0, 0, 0.55)); }
+#recover { position: absolute; top: 67%; left: 50%; transform: translateX(-50%); width: 260px; text-align: center; font-weight: 800; letter-spacing: 1px; }
+#recover .bar { height: 8px; margin-top: 6px; }
+#recoverFill { height: 100%; width: 0; background: var(--accent); }

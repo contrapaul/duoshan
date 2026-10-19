@@ -5,13 +5,13 @@
  * a Durable Object, locally for practice, and headless in tests. Rules follow
  * PROJECT_PLAN.md §4–§5 (Classic).
  */
-import { CLASSIC_GYM, type ArenaDef, type Box } from './arena';
+import { CLASSIC_GYM, centerlineX, type ArenaDef, type Box } from './arena';
 import {
   add, angleBetween, clamp, closestOnSegment, copy, dist, distXZ, dot, lenXZ, lerp, len, norm, reflect,
   rightDir, scale, sub, v3, viewDir, type Vec3,
 } from './math';
 import { nextFloat, nextInt } from './rng';
-import { BALLS, DT, GRAVITY, HANDLING, PLAYER, RULES, type BallType } from './tuning';
+import { BALLS, DT, GRAVITY, HANDLING, PLAYER, RULES, SCORE, SLOWMO, type BallType } from './tuning';
 import type { Ball, GameState, Player, PlayerInput, SimEvent, Team } from './types';
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,8 @@ export interface GameOptions {
   names?: string[];
   ballTypes?: BallType[];
   arena?: ArenaDef;
+  /** "Full slow motion" setup toggle (§4.7). */
+  fullSlow?: boolean;
 }
 
 const BOT_NAMES = [
@@ -35,7 +37,7 @@ const BOT_NAMES = [
 
 export function defaultBallTypes(players: number): BallType[] {
   const n = players <= 6 ? 4 : players <= 10 ? 6 : 8;
-  const mix: BallType[] = ['standard', 'speed', 'standard', 'heavy', 'standard', 'speed', 'standard', 'standard'];
+  const mix: BallType[] = ['standard', 'speed', 'bounce', 'heavy', 'standard', 'speed', 'standard', 'bounce'];
   return mix.slice(0, n);
 }
 
@@ -54,11 +56,12 @@ export function createGame(opts: GameOptions): GameState {
       onGround: true, crouching: false, sprinting: false,
       slideT: 0, slideCooldown: 0,
       stamina: PLAYER.staminaMax, staminaIdle: 0,
-      life: 'active', tripT: 0, outOrder: 0, reviveT: 0, protectT: 0,
-      held: -1, heldT: 0,
-      action: { kind: 'none' }, catchCooldown: 0, blockCooldown: 0,
-      prevPrimary: false, prevSecondary: false, prevJump: false,
-      kos: 0, catches: 0, blocks: 0,
+      life: 'active', tripT: 0, tripImmuneT: 0, outOrder: 0, reviveT: 0, protectT: 0,
+      held: -1,
+      action: { kind: 'none' }, catchCooldown: 0, dashCooldown: 0,
+      forceT: 0, forceDur: 0, forceVel: v3(),
+      prevPrimary: false, prevUse: false, useShield: false, prevJump: false,
+      kos: 0, catches: 0, blocks: 0, coins: 0, score: 0,
     });
   }
   const ballTypes = opts.ballTypes ?? defaultBallTypes(players.length);
@@ -66,6 +69,8 @@ export function createGame(opts: GameOptions): GameState {
     tick: 0, time: 0, rng: { s: opts.seed | 0 }, arena, players, balls: [],
     phase: 'countdown', phaseT: RULES.countdown, round: 1, score: [0, 0],
     outCounter: 0, firstKoThisRound: false, events: [], ballTypes,
+    dt: DT, timeScale: opts.fullSlow ? SLOWMO.scale : 1, slowT: 0, fullSlow: !!opts.fullSlow,
+    targetTimer: SLOWMO.targetEvery, target: null,
   };
   resetRound(state);
   return state;
@@ -88,20 +93,26 @@ export function resetRound(state: GameState): void {
     p.yaw = p.team === 0 ? 0 : Math.PI;
     p.pitch = 0;
     p.life = 'active';
-    p.tripT = 0; p.reviveT = 0; p.protectT = 0; p.outOrder = 0;
-    p.held = -1; p.heldT = 0; p.action = { kind: 'none' };
+    p.tripT = 0; p.tripImmuneT = 0; p.reviveT = 0; p.protectT = 0; p.outOrder = 0;
+    p.held = -1; p.action = { kind: 'none' };
     p.slideT = 0; p.slideCooldown = 0; p.stamina = PLAYER.staminaMax;
+    p.dashCooldown = 0; p.forceT = 0;
     p.crouching = false; p.sprinting = false; p.onGround = true;
   }
   const n = state.ballTypes.length;
   const hw = state.arena.court.halfWidth - 0.5;
   state.balls = state.ballTypes.map((type, i) => ({
     id: i, type,
-    pos: v3(0, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
-    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [],
+    pos: ballSpawn(state.arena, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
+    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [], bounces: 0,
   }));
   state.firstKoThisRound = false;
   state.outCounter = 0;
+}
+
+/** Balls start on the centerline. */
+function ballSpawn(arena: ArenaDef, r: number, z: number): Vec3 {
+  return v3(centerlineX(arena, z), r, z);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,8 +133,27 @@ export function handPos(p: Player): Vec3 {
   return v3(e.x + f.x * 0.45 + r.x * 0.3, e.y + f.y * 0.45 - 0.25, e.z + f.z * 0.45 + r.z * 0.3);
 }
 
+/** Where the held ball sits in block stance: a solid shield in front of the chest (§4.3.3). */
+export function shieldPos(p: Player): Vec3 {
+  const f = viewDir(p.yaw, p.pitch);
+  const e = eyePos(p);
+  const k = HANDLING.shieldForward;
+  return v3(e.x + f.x * k, e.y - 0.3 + f.y * k, e.z + f.z * k);
+}
+
+/** True once the shield is raised (block stance held past the raise time). */
+export function shieldUp(state: GameState, p: Player): boolean {
+  if (p.action.kind !== 'block' || p.held < 0 || p.life !== 'active') return false;
+  return p.action.t >= BALLS[state.balls[p.held]!.type].blockWindup;
+}
+
 /** Opponents are on the other half of the court; the centerline sign for a team. */
 export const teamSign = (team: Team): number => (team === 0 ? -1 : 1);
+
+/** How far a point is inside a team's own half (negative = over the centerline). */
+export function sideDepth(state: GameState, team: Team, x: number, z: number): number {
+  return (x - centerlineX(state.arena, z)) * teamSign(team);
+}
 
 export function aliveCount(state: GameState, team: Team): number {
   return state.players.filter((p) => p.team === team && (p.life !== 'out' || p.reviveT > 0)).length;
@@ -135,12 +165,16 @@ export function aliveCount(state: GameState, team: Team): number {
 export function step(state: GameState, inputs: readonly PlayerInput[]): SimEvent[] {
   state.events = [];
   state.tick++;
-  state.time += DT;
+  updateTimeScale(state);
+  state.time += state.dt;
 
   if (state.phase === 'round_end' || state.phase === 'match_end') {
     state.phaseT -= DT;
     if (state.phaseT <= 0) {
-      if (state.phase === 'match_end') state.score = [0, 0];
+      if (state.phase === 'match_end') {
+        state.score = [0, 0];
+        for (const p of state.players) { p.score = 0; p.kos = 0; p.catches = 0; p.blocks = 0; }
+      }
       state.round = state.phase === 'match_end' ? 1 : state.round + 1;
       resetRound(state);
       state.phase = 'countdown';
@@ -166,7 +200,7 @@ export function step(state: GameState, inputs: readonly PlayerInput[]): SimEvent
     if (state.phase === 'play' && p.life === 'active' && input) updateActions(state, p, input);
     if (input) {
       p.prevPrimary = input.primary;
-      p.prevSecondary = input.secondary;
+      p.prevUse = input.use;
       p.prevJump = input.jump;
     }
   }
@@ -175,8 +209,50 @@ export function step(state: GameState, inputs: readonly PlayerInput[]): SimEvent
     checkCenterline(state);
   }
   updateBalls(state);
-  if (state.phase === 'play') checkRoundEnd(state);
+  if (state.phase === 'play') {
+    updateTarget(state);
+    checkRoundEnd(state);
+  }
   return state.events;
+}
+
+/** Slow motion eases the whole match's time scale; the tick rate never changes (§4.7). */
+function updateTimeScale(state: GameState): void {
+  state.slowT = Math.max(0, state.slowT - DT);
+  const want = state.fullSlow || state.slowT > 0 ? SLOWMO.scale : 1;
+  const stepMax = SLOWMO.easeRate * DT;
+  state.timeScale += clamp(want - state.timeScale, -stepMax, stepMax);
+  state.dt = DT * state.timeScale;
+}
+
+function startSlowmo(state: GameState, cause: 'big_oof' | 'target', seconds: number): void {
+  if (state.fullSlow) return;
+  state.slowT = Math.max(state.slowT, seconds);
+  state.events.push({ t: 'slowmo', cause, seconds });
+}
+
+/** A target appears every 90 s of play above the centerline; hitting it starts slow motion. */
+function updateTarget(state: GameState): void {
+  if (state.fullSlow) return;
+  const tg = state.target;
+  if (!tg) {
+    state.targetTimer -= DT;
+    if (state.targetTimer <= 0) {
+      state.targetTimer = SLOWMO.targetEvery;
+      const z = (nextFloat(state.rng) - 0.5) * 6;
+      state.target = { pos: v3(centerlineX(state.arena, z), 4 + nextFloat(state.rng) * 2, z), vz: 1.2, t: SLOWMO.targetUp };
+      state.events.push({ t: 'target_spawn' });
+    }
+    return;
+  }
+  tg.t -= DT;
+  tg.pos.z += tg.vz * state.dt;
+  if (Math.abs(tg.pos.z) > 3.5) tg.vz = -Math.sign(tg.pos.z) * Math.abs(tg.vz);
+  tg.pos.x = centerlineX(state.arena, tg.pos.z); // stays over the centerline
+  if (tg.t <= 0) {
+    state.target = null;
+    state.events.push({ t: 'target_gone' });
+  }
 }
 
 function applyLook(p: Player, input: PlayerInput): void {
@@ -188,9 +264,13 @@ function applyLook(p: Player, input: PlayerInput): void {
 // Movement
 
 function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined): void {
+  const DT = state.dt;
   p.slideCooldown = Math.max(0, p.slideCooldown - DT);
+  p.dashCooldown = Math.max(0, p.dashCooldown - DT);
   p.protectT = Math.max(0, p.protectT - DT);
+  p.tripImmuneT = Math.max(0, p.tripImmuneT - DT);
   const horizSpeed = lenXZ(p.vel);
+  const blocking = p.action.kind === 'block';
 
   if (p.life === 'tripped') {
     p.tripT -= DT;
@@ -202,10 +282,17 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
     if (p.tripT <= 0) {
       p.life = 'active';
       p.vel = v3();
+      p.tripImmuneT = PLAYER.tripImmunity;
       state.events.push({ t: 'getup', player: p.id });
     }
+  } else if (p.forceT > 0) {
+    // Dash or shove: forced velocity that eases out.
+    p.forceT -= DT;
+    const k = 0.5 + 0.5 * Math.max(0, p.forceT) / p.forceDur;
+    p.vel.x = p.forceVel.x * k;
+    p.vel.z = p.forceVel.z * k;
   } else if (input && state.phase === 'play') {
-    const wantCrouch = input.crouch;
+    const wantCrouch = input.crouch && !blocking;
     const moving = Math.abs(input.moveX) + Math.abs(input.moveZ) > 0.1;
     // Slide: crouch pressed while sprinting fast on the ground.
     if (wantCrouch && !p.crouching && p.sprinting && p.onGround && p.slideT <= 0 && p.slideCooldown <= 0 &&
@@ -228,8 +315,8 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
       if (p.slideT <= 0) p.slideCooldown = PLAYER.slideCooldown;
       p.sprinting = false;
     } else {
-      p.sprinting = input.sprint && input.moveZ > 0.1 && p.stamina > 0 && !wantCrouch;
-      const max = wantCrouch ? PLAYER.crouchSpeed : p.sprinting ? PLAYER.sprintSpeed : PLAYER.runSpeed;
+      p.sprinting = input.sprint && input.moveZ > 0.1 && p.stamina > 0 && !wantCrouch && !blocking;
+      const max = blocking ? PLAYER.walkSpeed : wantCrouch ? PLAYER.crouchSpeed : p.sprinting ? PLAYER.sprintSpeed : PLAYER.runSpeed;
       const f = viewDir(p.yaw, 0);
       const r = rightDir(p.yaw);
       let wx = f.x * input.moveZ + r.x * input.moveX;
@@ -252,8 +339,21 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
       }
     }
     if (input.jump && !p.prevJump && p.onGround && p.slideT <= 0) {
-      p.vel.y = PLAYER.jumpSpeed;
-      p.onGround = false;
+      // A/D + Space is a sidestep dash; otherwise (or if it isn't available) a normal jump (§4.2).
+      const side = Math.abs(input.moveX) > 0.3 ? Math.sign(input.moveX) : 0;
+      const canDash = side !== 0 && !blocking && !wantCrouch && p.dashCooldown <= 0 && p.stamina >= PLAYER.dashStaminaCost;
+      if (canDash) {
+        const r = rightDir(p.yaw);
+        p.forceVel = v3(r.x * side * PLAYER.dashSpeed, 0, r.z * side * PLAYER.dashSpeed);
+        p.forceT = p.forceDur = PLAYER.dashTime;
+        p.dashCooldown = PLAYER.dashCooldown;
+        p.stamina -= PLAYER.dashStaminaCost;
+        p.staminaIdle = 0;
+        state.events.push({ t: 'dash', player: p.id });
+      } else {
+        p.vel.y = PLAYER.jumpSpeed;
+        p.onGround = false;
+      }
     }
   } else {
     // Countdown / no input: stand still.
@@ -261,6 +361,7 @@ function movePlayer(state: GameState, p: Player, input: PlayerInput | undefined)
     p.vel.z = 0;
   }
 
+  if (p.forceT > 0 && !(input && state.phase === 'play')) p.forceT = 0;
   p.vel.y -= GRAVITY * DT;
   const prevY = p.pos.y;
   p.pos = add(p.pos, scale(p.vel, DT));
@@ -314,8 +415,9 @@ function collidePlayerWorld(state: GameState, p: Player, prevY: number): void {
       p.vel.x += nx * into;
       p.vel.z += nz * into;
     }
-    // Sprinting head-on into a wall trips you (§4.2).
-    if (p.life === 'active' && speed >= PLAYER.tripSpeedThreshold * 0.95 &&
+    // Sprinting head-on into a wall trips you (§4.2). Only a real sprint counts, not a
+    // dash, slide or shove, so brushing past cover never flips anyone.
+    if (p.life === 'active' && p.sprinting && p.forceT <= 0 && speed >= PLAYER.tripSpeedThreshold &&
         into >= speed * Math.cos((PLAYER.wallTripAngleDeg * Math.PI) / 180)) {
       trip(state, p, 'wall', v3(nx * 2, 1.5, nz * 2));
     }
@@ -359,7 +461,7 @@ function collidePlayers(state: GameState): void {
 function checkCenterline(state: GameState): void {
   for (const p of state.players) {
     if (p.life === 'out') continue;
-    if (p.pos.x * teamSign(p.team) < 0) knockOut(state, p, -1, -1, 'line', copy(p.pos), v3());
+    if (sideDepth(state, p.team, p.pos.x, p.pos.z) < 0) knockOut(state, p, -1, -1, 'line', copy(p.pos), v3());
   }
 }
 
@@ -367,25 +469,33 @@ function checkCenterline(state: GameState): void {
 // Ball handling: pickup, throw, catch, block (§4.3)
 
 function updateActions(state: GameState, p: Player, input: PlayerInput): void {
+  const DT = state.dt;
   p.catchCooldown = Math.max(0, p.catchCooldown - DT);
-  p.blockCooldown = Math.max(0, p.blockCooldown - DT);
   const pressed = input.primary && !p.prevPrimary;
   const released = !input.primary && p.prevPrimary;
-  const blockPressed = input.secondary && !p.prevSecondary;
+  // E picks up or catches, like left click with empty hands (§4.3).
+  const usePressed = input.use && !p.prevUse;
 
-  if (pressed && p.action.kind === 'none') {
-    if (p.held < 0) {
-      const ball = findPickup(state, p);
-      if (ball) p.action = { kind: 'pickup', t: 0, ballId: ball.id };
-      else if (p.catchCooldown <= 0) p.action = { kind: 'catch', t: 0 };
-    } else {
-      p.action = { kind: 'aim', t: 0, released: false };
-    }
+  // E pressed while already holding a ball raises the shield for as long as E is held.
+  // (Holding E through a pickup doesn't: the press was used to pick the ball up.)
+  if (usePressed && p.held >= 0) p.useShield = true;
+  if (!input.use || p.held < 0) p.useShield = false;
+  const shieldHeld = input.secondary || p.useShield;
+  // Block stance lasts exactly as long as RMB (or E) is held with a ball (§4.3.3).
+  if (shieldHeld && p.held >= 0 && (p.action.kind === 'none' || p.action.kind === 'aim')) {
+    p.action = { kind: 'block', t: 0 };
+  } else if (!shieldHeld && p.action.kind === 'block') {
+    p.action = { kind: 'none' };
+  }
+
+  if ((pressed || usePressed) && p.action.kind === 'none' && p.held < 0) {
+    const ball = findPickup(state, p);
+    if (ball) p.action = { kind: 'pickup', t: 0, ballId: ball.id };
+    else if (p.catchCooldown <= 0) p.action = { kind: 'catch', t: 0 };
+  } else if (pressed && p.action.kind === 'none' && p.held >= 0) {
+    p.action = { kind: 'aim', t: 0, released: false };
   }
   if (released && p.action.kind === 'aim') p.action.released = true;
-  if (blockPressed && p.held >= 0 && p.blockCooldown <= 0 && (p.action.kind === 'none' || p.action.kind === 'aim')) {
-    p.action = { kind: 'block', t: 0 };
-  }
 
   const a = p.action;
   switch (a.kind) {
@@ -398,7 +508,6 @@ function updateActions(state: GameState, p: Player, input: PlayerInput): void {
           ball.holder = p.id;
           ball.vel = v3();
           p.held = ball.id;
-          p.heldT = 0;
           p.protectT = 0;
           state.events.push({ t: 'pickup', player: p.id, ball: ball.id });
         }
@@ -427,29 +536,13 @@ function updateActions(state: GameState, p: Player, input: PlayerInput): void {
       }
       break;
     }
-    case 'block': {
+    case 'block':
       a.t += DT;
-      const ball = state.balls[p.held];
-      const windup = ball ? BALLS[ball.type].blockWindup : 0.05;
-      if (a.t > windup + HANDLING.blockWindow) {
-        p.blockCooldown = HANDLING.blockCooldown;
-        p.action = { kind: 'none' };
-      }
       break;
-    }
     case 'none':
       break;
   }
 
-  // Possession clock (§5.1 anti-stall).
-  if (p.held >= 0) {
-    p.heldT += DT;
-    if (p.heldT >= HANDLING.possessionMax) {
-      const ball = state.balls[p.held]!;
-      dropBall(p, ball);
-      state.events.push({ t: 'possession_drop', player: p.id, ball: ball.id });
-    }
-  }
 }
 
 export function findPickup(state: GameState, p: Player): Ball | undefined {
@@ -488,10 +581,12 @@ function throwBall(state: GameState, p: Player, ball: Ball, charge: number): voi
   ball.thrower = p.id;
   ball.throwerTeam = p.team;
   ball.hits = [];
+  ball.near = [];
+  ball.dodged = [];
+  ball.bounces = 0;
   ball.deflectedBy = -1;
   ball.flags = [...(p.slideT > 0 ? ['slide'] : []), ...(!p.onGround ? ['airborne'] : [])];
   p.held = -1;
-  p.heldT = 0;
   p.protectT = 0;
   state.events.push({ t: 'throw', player: p.id, ball: ball.id, charge });
 }
@@ -504,12 +599,11 @@ function dropBall(p: Player, ball: Ball): void {
   ball.pos = handPos(p);
   ball.vel = v3(p.vel.x, 0, p.vel.z);
   p.held = -1;
-  p.heldT = 0;
   if (p.action.kind === 'aim' || p.action.kind === 'block') p.action = { kind: 'none' };
 }
 
 function trip(state: GameState, p: Player, cause: 'wall' | 'collision' | 'heavy' | 'speedball', impulse: Vec3): void {
-  if (p.life !== 'active' || p.protectT > 0) return;
+  if (p.life !== 'active' || p.protectT > 0 || p.tripImmuneT > 0) return;
   p.life = 'tripped';
   p.tripT = PLAYER.tripTime + PLAYER.getUpTime;
   p.slideT = 0;
@@ -520,7 +614,7 @@ function trip(state: GameState, p: Player, cause: 'wall' | 'collision' | 'heavy'
 
 function knockOut(
   state: GameState, p: Player, byId: number, ballId: number,
-  cause: Extract<SimEvent, { t: 'ko' }>['cause'], point: Vec3, impulse: Vec3,
+  cause: Extract<SimEvent, { t: 'ko' }>['cause'], point: Vec3, impulse: Vec3, extra: string[] = [],
 ): void {
   if (p.life === 'out') return;
   if (p.held >= 0) dropBall(p, state.balls[p.held]!);
@@ -539,16 +633,20 @@ function knockOut(
       // hits already includes this player, so a second entry means one throw took out two.
       if (ball.hits.length >= 2) special.push('double');
       if (ball.deflectedBy >= 0) special.push('bounce_out');
+      if (ball.bounces > 0) special.push('bank_shot');
     }
     if (!state.firstKoThisRound) special.push('first');
+    // A catch is scored as a catch (below), not as a knockout.
+    if (cause !== 'catch') by.score += SCORE.ko + special.reduce((sum, s) => sum + (SCORE.special[s] ?? 0), 0);
   }
+  special.push(...extra);
   state.firstKoThisRound = true;
   state.events.push({ t: 'ko', player: p.id, by: byId, ball: ballId, cause, point, impulse, seed: nextInt(state.rng, 1 << 30), special });
 }
 
 function updateRevive(state: GameState, p: Player): void {
   if (p.reviveT <= 0) return;
-  p.reviveT -= DT;
+  p.reviveT -= state.dt;
   if (p.reviveT <= 0) {
     p.life = 'active';
     p.pos = spawnPoint(state, p);
@@ -572,6 +670,8 @@ function checkRoundEnd(state: GameState): void {
     if (aliveCount(state, team) === 0) {
       const winner = (1 - team) as Team;
       state.score[winner]++;
+      const matchWon = state.score[winner] >= RULES.roundsToWin;
+      for (const p of state.players) if (p.team === winner) p.score += SCORE.roundWin + (matchWon ? SCORE.matchWin : 0);
       state.events.push({ t: 'round_end', winner, score: [state.score[0], state.score[1]] });
       if (state.score[winner] >= RULES.roundsToWin) {
         state.phase = 'match_end';
@@ -580,6 +680,7 @@ function checkRoundEnd(state: GameState): void {
         state.phase = 'round_end';
       }
       state.phaseT = RULES.roundEndPause;
+      if (state.target) { state.target = null; state.events.push({ t: 'target_gone' }); }
       return;
     }
   }
@@ -593,15 +694,15 @@ function updateBalls(state: GameState): void {
     if (ball.state === 'held') {
       const holder = state.players[ball.holder];
       if (!holder || holder.life === 'out') { ball.state = 'dead'; continue; }
-      ball.pos = handPos(holder);
+      ball.pos = holder.action.kind === 'block' ? shieldPos(holder) : handPos(holder);
       ball.vel = copy(holder.vel);
       continue;
     }
     if (ball.state === 'rest') continue;
     const def = BALLS[ball.type];
     const speed = len(ball.vel);
-    const n = clamp(Math.ceil((speed * DT) / def.radius), 1, 12);
-    const sdt = DT / n;
+    const n = clamp(Math.ceil((speed * state.dt) / def.radius), 1, 12);
+    const sdt = state.dt / n;
     for (let s = 0; s < n; s++) if (substepBall(state, ball, sdt)) break;
   }
 }
@@ -613,8 +714,10 @@ function substepBall(state: GameState, ball: Ball, sdt: number): boolean {
   ball.vel.y -= GRAVITY * def.gravityScale * sdt;
   ball.pos = add(ball.pos, scale(ball.vel, sdt));
 
-  // Catch and block volumes are in front of the body, so they are checked first.
-  if (ball.state === 'live' && checkCatchBlock(state, ball)) return true;
+  // Catch volumes and shields are in front of the body, so they are checked first.
+  if (ball.state === 'live' && checkCatch(state, ball)) return true;
+  collideBallShields(state, ball);
+  if (ball.state === 'live') checkTarget(state, ball);
 
   // Floor.
   if (ball.pos.y < r) {
@@ -654,7 +757,11 @@ function substepBall(state: GameState, ball: Ball, sdt: number): boolean {
 }
 
 function envTouch(state: GameState, ball: Ball, speed: number, surface: 'floor' | 'wall'): void {
-  if (ball.state === 'live') ball.state = 'dead';
+  if (ball.state === 'live') {
+    // A real bounce (not a roll) can be survived by balls with liveBounces (bounce ball: 2).
+    if (speed > 2 && ball.bounces < BALLS[ball.type].liveBounces) ball.bounces++;
+    else ball.state = 'dead';
+  }
   if (speed > 1) state.events.push({ t: 'bounce', ball: ball.id, speed, surface });
 }
 
@@ -693,13 +800,16 @@ function collideBallPlayers(state: GameState, ball: Ball): void {
     if (live && p.team === ball.throwerTeam) continue;
     if (live && ball.hits.includes(p.id)) continue;
     const { point, d } = capsuleContact(p, ball.pos);
+    if (live) trackNearMiss(state, ball, p, d - def.radius - PLAYER.radius);
     if (d >= def.radius + PLAYER.radius) continue;
     const n = norm(sub(ball.pos, point));
     const relVel = sub(ball.vel, p.vel);
     if (live && p.protectT <= 0) {
       ball.hits.push(p.id);
       const impulse = scale(ball.vel, def.koImpulse * 0.15);
-      knockOut(state, p, ball.thrower, ball.id, 'hit', point, impulse);
+      const bigOof = ball.pos.y > p.pos.y + playerHeight(p) - SLOWMO.headZone;
+      knockOut(state, p, ball.thrower, ball.id, 'hit', point, impulse, bigOof ? ['big_oof'] : []);
+      if (bigOof && nextFloat(state.rng) < SLOWMO.bigOofChance) startSlowmo(state, 'big_oof', SLOWMO.bigOofSeconds);
       // The ball stays live after a knockout and can take out a second player (§4.4 rule 3).
       ball.vel = scale(reflect(ball.vel, n), 0.35);
       ball.pos = add(point, scale(n, def.radius + PLAYER.radius + 0.01));
@@ -739,66 +849,120 @@ function collideBallPlayers(state: GameState, ball: Ball): void {
   }
 }
 
+/**
+ * "Dodge" (§4.9): a live ball came within dodgeMargin of a player's body and is
+ * now moving away without having hit them.
+ */
+function trackNearMiss(state: GameState, ball: Ball, p: Player, gap: number): void {
+  if (p.life !== 'active' || ball.dodged.includes(p.id)) return;
+  const near = ball.near.find((n) => n.id === p.id);
+  if (!near) {
+    if (gap < HANDLING.dodgeMargin) ball.near.push({ id: p.id, d: gap });
+    return;
+  }
+  if (gap < near.d) { near.d = gap; return; }
+  if (gap > near.d + 0.05) {
+    ball.dodged.push(p.id);
+    state.events.push({ t: 'dodge', player: p.id, ball: ball.id });
+  }
+}
+
 /** Returns true if the ball was caught (and is now held). */
-function checkCatchBlock(state: GameState, ball: Ball): boolean {
+function checkCatch(state: GameState, ball: Ball): boolean {
   const def = BALLS[ball.type];
   for (const p of state.players) {
     if (p.life !== 'active' || p.team === ball.throwerTeam || ball.hits.includes(p.id)) continue;
     const a = p.action;
+    if (a.kind !== 'catch' || a.t > HANDLING.catchWindow) continue;
     const f = viewDir(p.yaw, p.pitch);
     const e = eyePos(p);
     const toBall = sub(ball.pos, e);
-    if (a.kind === 'catch' && a.t <= HANDLING.catchWindow) {
-      const center = v3(e.x + f.x * 0.5, e.y - 0.3 + f.y * 0.5, e.z + f.z * 0.5);
-      const inReach = dist(ball.pos, center) <= HANDLING.catchRadius * def.catchRadiusScale;
-      const inView = angleBetween(f, toBall) <= (def.catchConeDeg * Math.PI) / 180;
-      if (inReach && inView) {
-        if (!def.catchable) {
-          ball.hits.push(p.id);
-          knockOut(state, p, ball.thrower, ball.id, 'heavy_catch', copy(ball.pos), scale(ball.vel, def.koImpulse * 0.15));
-          return false;
-        }
-        const thrower = state.players[ball.thrower];
-        ball.state = 'held';
-        ball.holder = p.id;
-        ball.vel = v3();
-        p.held = ball.id;
-        p.heldT = 0;
-        p.catches++;
-        p.action = { kind: 'none' };
-        if (def.type === 'speed') p.vel = add(p.vel, scale(norm(v3(toBall.x, 0, toBall.z)), -2)); // jarring
-        state.events.push({ t: 'catch', player: p.id, ball: ball.id, thrower: ball.thrower });
-        if (thrower && thrower.life !== 'out') knockOut(state, thrower, p.id, ball.id, 'catch', copy(thrower.pos), v3());
-        reviveFirstOut(state, p.team);
-        return true;
-      }
+    const center = v3(e.x + f.x * 0.5, e.y - 0.3 + f.y * 0.5, e.z + f.z * 0.5);
+    const inReach = dist(ball.pos, center) <= HANDLING.catchRadius * def.catchRadiusScale;
+    const inView = angleBetween(f, toBall) <= (def.catchConeDeg * Math.PI) / 180;
+    if (!inReach || !inView) continue;
+    if (!def.catchable) {
+      ball.hits.push(p.id);
+      knockOut(state, p, ball.thrower, ball.id, 'heavy_catch', copy(ball.pos), scale(ball.vel, def.koImpulse * 0.15));
+      return false;
     }
-    if (a.kind === 'block' && p.held >= 0) {
-      const held = state.balls[p.held]!;
-      const windup = BALLS[held.type].blockWindup;
-      if (a.t < windup || a.t > windup + HANDLING.blockWindow) continue;
-      const center = handPos(p);
-      const inReach = dist(ball.pos, center) <= HANDLING.blockRadius;
-      const inView = angleBetween(f, toBall) <= (HANDLING.catchConeDeg * Math.PI) / 180;
-      if (inReach && inView) {
-        if (!def.blockable) {
-          ball.hits.push(p.id);
-          knockOut(state, p, ball.thrower, ball.id, 'heavy_block', copy(ball.pos), scale(ball.vel, def.koImpulse * 0.15));
-          return false;
-        }
-        // Deflect off the held ball; it stays live and can bounce-out the blocker's teammates.
-        let v = scale(reflect(ball.vel, f), 0.6);
-        if (dot(v, f) < 0) v = scale(v, -1);
-        ball.vel = add(v, v3(0, 2, 0));
-        ball.deflectedBy = p.id;
-        ball.hits.push(p.id);
-        p.blocks++;
-        p.action = { kind: 'none' };
-        p.blockCooldown = 0;
-        state.events.push({ t: 'block', player: p.id, ball: ball.id });
-        return false;
-      }
-    }
+    const thrower = state.players[ball.thrower];
+    ball.state = 'held';
+    ball.holder = p.id;
+    ball.vel = v3();
+    p.held = ball.id;
+    p.catches++;
+    p.score += SCORE.catch;
+    p.action = { kind: 'none' };
+    if (def.type === 'speed') shove(p, norm(v3(-toBall.x, 0, -toBall.z)), 2, 0.2); // jarring
+    state.events.push({ t: 'catch', player: p.id, ball: ball.id, thrower: ball.thrower });
+    if (thrower && thrower.life !== 'out') knockOut(state, thrower, p.id, ball.id, 'catch', copy(thrower.pos), v3());
+    reviveFirstOut(state, p.team);
+    return true;
   }
   return false;
+}
+
+function shove(p: Player, dir: Vec3, speed: number, dur: number): void {
+  p.forceVel = v3(dir.x * speed, 0, dir.z * speed);
+  p.forceT = p.forceDur = dur;
+}
+
+/**
+ * Physics blocking (§4.3.3): a raised shield is a solid sphere. Any ball that
+ * touches it bounces off. A live ball stays live (bounce-outs) and can no longer
+ * knock out the blocker. Heavy balls bounce off weightily, shove the blocker
+ * back and knock the shield ball out of their hands.
+ */
+function collideBallShields(state: GameState, ball: Ball): void {
+  const def = BALLS[ball.type];
+  for (const p of state.players) {
+    if (!shieldUp(state, p)) continue;
+    if (ball.state === 'live' && p.team === ball.throwerTeam) continue; // passes through teammates
+    const shield = state.balls[p.held]!;
+    const sr = BALLS[shield.type].radius;
+    const c = shieldPos(p);
+    const d = sub(ball.pos, c);
+    const dl = len(d);
+    if (dl >= def.radius + sr) continue;
+    const n = dl > 1e-9 ? scale(d, 1 / dl) : scale(viewDir(p.yaw, p.pitch), 1);
+    ball.pos = add(c, scale(n, def.radius + sr + 0.01));
+    const rel = sub(ball.vel, p.vel);
+    const vn = dot(rel, n);
+    if (vn >= 0) continue;
+    const impact = len(ball.vel);
+    // A heavy ball out-masses the shield: it changes direction far less.
+    const give = def.breaksShield ? 0.55 : 1;
+    const e = (def.restitution + BALLS[shield.type].restitution) / 2;
+    ball.vel = sub(ball.vel, scale(n, (1 + e) * vn * give));
+    if (ball.state === 'live') {
+      ball.deflectedBy = p.id;
+      if (!ball.hits.includes(p.id)) ball.hits.push(p.id);
+      p.blocks++;
+      p.score += SCORE.block;
+      state.events.push({ t: 'block', player: p.id, ball: ball.id, broke: def.breaksShield });
+    } else {
+      state.events.push({ t: 'bounce', ball: ball.id, speed: impact, surface: 'player' });
+    }
+    const back = norm(v3(-n.x, 0, -n.z));
+    if (def.breaksShield && impact > 4) {
+      dropBall(p, shield);
+      shove(p, back, 5, 0.4);
+    } else if (def.type === 'speed' && impact > 12) {
+      shove(p, back, 2, 0.2); // jarring
+    }
+  }
+}
+
+/** A live ball touching the slow-motion target (§4.7). */
+function checkTarget(state: GameState, ball: Ball): void {
+  const tg = state.target;
+  if (!tg || dist(ball.pos, tg.pos) > SLOWMO.targetRadius + BALLS[ball.type].radius) return;
+  state.target = null;
+  const thrower = state.players[ball.thrower];
+  if (thrower) thrower.coins += SLOWMO.targetCoins;
+  state.events.push({ t: 'target_hit', player: ball.thrower, coins: SLOWMO.targetCoins });
+  ball.state = 'dead';
+  ball.vel = scale(ball.vel, 0.2);
+  startSlowmo(state, 'target', SLOWMO.targetSeconds);
 }
