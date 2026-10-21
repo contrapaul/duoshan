@@ -1111,7 +1111,9 @@ export const speedBall: BallDef = {
 |---|---|---|
 | Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
 | Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
-| **S1** performance on an M1 MacBook Air | ⏳ **Owner to run** | Open the demo, choose "8v8 stress test", and read the fps line at bottom-left. Download size: 150 KB gzip for the menu, plus 1.7 MB for physics loaded on Play. |
+| **S1** performance on an M1 MacBook Air | ✅ **Done (2026-10-21)** | Owner ran the 8v8 stress test on an M1 MacBook Air: fps "perfectly acceptable" (meets the 60 fps exit criterion). |
+
+**Phase 0 is now complete** (2026-10-21): all four spikes have a verdict, and every exit criterion is met. |
 | **S2** latency from Shenzhen | ✅ **Done (2026-10-19)** | Edge and room in KIX (Osaka). Median RTT **68 ms**, p95 101 ms, jitter 9 ms, 0% loss; 30 updates/s at 8.7 KB/s down. **Verdict: proceed as designed (§13.10, row 1); no Local Host mode.** A repeat from the other Shenzhen location at a busy hour is a non-blocking follow-up. |
 | **S3** referee loop in a Durable Object | ✅ Done | `npm run bench`: 8v8 averages 0.075 ms per tick. On Cloudflare (KIX), the DO held 60 ticks/s with a worst timer gap of 16 ms. Rapier-in-DO wasn't needed. |
 | **S4** netcode feel at 150 ms | ⏭ Moved to Phase 2 | It needs the prediction layer. The binary snapshot codec (~300 bytes at 8v8) is already built and tested. |
@@ -1135,8 +1137,11 @@ export const speedBall: BallDef = {
 
 **Exit criteria:** 5+ students play it and ask to play again. The catch/block feel is tuned. There's a gameplay video of the owner's favourite moments.
 
+**Phase 1 status (2026-10-21):** ✅ Done. The owner reports that students enjoy the game and are eager to play again — the exit criterion is met. (No gameplay video yet; treated as non-blocking.)
+
 #### Phase 2: Networked Core (Weeks 8–12)
 **Goal:** low-latency online play that feels fair.
+**Status (2026-10-21):** ⬜ Not started — next phase. Owner's first milestone: **testable multiplayer in real play** — deployed to `duoshan.contrapaul.com` with room codes, so two or more real players can play over the network. First slice: `GameRoom` DO referee (port of the `ProbeRoom` loop) + `Directory`/room codes + join flow, client prediction and reconciliation, forward-predicted balls, defender-favoured catches, bot fill, reconnect. Local Host mode is not built (§13.10, row 1).
 - The `GameRoom` Durable Object (the referee) and the `Directory` DO, with a fixed tick and snapshots with delta compression. Join tickets follow Flashstone's pattern.
 - Client prediction and reconciliation, entity interpolation, forward-predicted balls, and catch/block lag compensation.
 - Room codes, share URLs, Quick Play, bot fill to 6, join-in-progress, and reconnect.

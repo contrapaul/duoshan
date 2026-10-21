@@ -1,6 +1,6 @@
 # DuoShan — Session Handoff
 
-*Status as of 2026-10-19 (latency test results added). Read this first, then `PROJECT_PLAN.md` (the source of truth for design and architecture) and `CLAUDE.md` (coding guidelines).*
+*Status as of 2026-10-21 (Phase 0 and 1 complete; Phase 2 next). Read this first, then `PROJECT_PLAN.md` (the source of truth for design and architecture) and `CLAUDE.md` (coding guidelines).*
 
 ## 1. What this is
 
@@ -37,9 +37,9 @@ DuoShan is a browser-based multiplayer dodgeball game (first person, voxel chara
 
 | Phase | Status |
 |---|---|
-| 0 Foundations | ✅ Done. S2 latency passed (68 ms median from Shenzhen). Only the S1 M1 fps check remains (§6). |
-| 1 Offline feel prototype | ✅ Done, and well beyond the plan (two playtest rounds incorporated) |
-| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | ⬜ Not started. **Unblocked:** latency passed, so build it on Cloudflare DOs as designed (no Local Host mode). |
+| 0 Foundations | ✅ Done (2026-10-21). S1 fps passed on M1 Air (owner: "perfectly acceptable"), S2 latency passed (68 ms median from Shenzhen). |
+| 1 Offline feel prototype | ✅ Done (2026-10-21). Well beyond the plan (two playtest rounds incorporated); students enjoy it and ask to play again — exit criterion met. |
+| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | ⬜ **Next — unblocked.** Owner's first milestone: testable multiplayer in real play — deployed to `duoshan.contrapaul.com` with room codes, 2+ real players over the network. Build on Cloudflare DOs as designed (no Local Host mode). |
 | 3 Alpha (round overtime/shrinking court, sudden death, match clock, tutorial, art pass) | ⬜ Not started |
 | 4 Accounts, chat, moderation, admin (D1 not yet created) | ⬜ Not started |
 | 5 Arenas: Hypergym, Neighborhood, City Block, Ultimate | ⬜ Not started |
@@ -119,9 +119,9 @@ Balls keep their colour on the ground and glow in their own colour while live. B
 - **Room (DO):** 60 ticks/s, worst timer gap 16 ms.
 - **Verdict:** proceed as designed. Phase 2 is unblocked.
 
-**Still open on the owner's side (none of these block Phase 2):**
-1. **Spike S1, fps:** check frame rate on an M1 Air using the menu's "8v8 stress test" match.
-2. **Repeat the latency test** from the other Shenzhen location (school vs home) at a busy hour, to confirm the median stays ≤ 100 ms.
+**Owner follow-ups:**
+1. ~~Spike S1, fps~~ ✅ Done 2026-10-21 — acceptable on M1 Air.
+2. **Repeat the latency test** from the other Shenzhen location (school vs home) at a busy hour, to confirm the median stays ≤ 100 ms. (Non-blocking.)
 
 **Note for Phase 2:** the 364 ms max shows occasional spikes. Interpolation and reconnect logic should ride out isolated ~400 ms spikes without dropping the player.
 
