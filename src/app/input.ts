@@ -42,7 +42,9 @@ export class LocalInput {
   }
 
   lock(): void {
-    void this.canvas.requestPointerLock();
+    // May reject when no fresh user gesture is available (e.g. called after
+    // the join round-trip); the canvas click handler re-locks on demand.
+    void this.canvas.requestPointerLock().catch(() => { /* user clicks canvas to lock */ });
   }
 
   sample(): PlayerInput {

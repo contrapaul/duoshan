@@ -8,7 +8,9 @@
  * 3. two WebSocket players join /rt/room?code=CODE, say hello
  *    → each must get a welcome (distinct slots, teams balanced)
  * 4. each sends input packets at 30 Hz; both must receive binary snapshots
- *    and JSON events, with ticks advancing
+ *    and JSON events, with ticks advancing; the Phase 2b HUD fields (round,
+ *    time scale, per-player block layout, exact byte length) are decoded
+ *
  * 5. player 2 leaves → player 1 must see a `left` broadcast
  *
  * Exits 0 on success, 1 on any failure.
@@ -37,7 +39,7 @@ ok(status.code === code && status.team_size === 3 && status.seats === 6, `room s
 // 3. two players
 function play(name) {
   const ws = new WebSocket(`${base.replace('http', 'ws')}/rt/room?code=${code}`);
-  const state = { welcome: null, snaps: 0, firstTick: null, lastTick: null, events: [], joined: 0, left: -1, closed: false, err: null };
+  const state = { welcome: null, snaps: 0, firstTick: null, lastTick: null, layoutErr: null, events: [], joined: 0, left: -1, closed: false, err: null };
   ws.binaryType = 'arraybuffer';
   ws.onmessage = (ev) => {
     if (typeof ev.data === 'string') {
@@ -50,9 +52,22 @@ function play(name) {
     } else {
       const v = new DataView(ev.data);
       state.snaps++;
-      const tick = v.getUint32(1);
+      const tick = v.getUint32(1, true);
       if (state.firstTick === null) state.firstTick = tick;
       state.lastTick = tick;
+      // Phase 2b layout checks: explicit little-endian, HUD globals at fixed
+      // offsets, exact total byte length.
+      const np = v.getUint8(8);
+      const nb = v.getUint8(9);
+      const hasTarget = v.getUint8(16) === 1;
+      const expected = 17 + (hasTarget ? 7 : 0) + np * 33 + nb * 8;
+      if (ev.data.byteLength !== expected) {
+        state.layoutErr = state.layoutErr ?? `${ev.data.byteLength} != ${expected}`;
+      }
+      const base = 17 + (hasTarget ? 7 : 0);
+      for (let i = 0; i < np; i++) {
+        if (v.getUint8(base + 33 * i) !== i) state.layoutErr = state.layoutErr ?? `player id at block ${i}`;
+      }
     }
   };
   ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', name }));
@@ -84,11 +99,11 @@ const sendInput = () => {
     const buf = new ArrayBuffer(12);
     const v = new DataView(buf);
     v.setUint8(0, 2);
-    v.setUint32(1, Math.floor((Date.now() - t0) / 33));
+    v.setUint32(1, Math.floor((Date.now() - t0) / 33), true);
     v.setInt8(5, 0);
     v.setInt8(6, 127);
-    v.setUint16(7, 16384);
-    v.setInt16(9, 0);
+    v.setUint16(7, 16384, true);
+    v.setInt16(9, 0, true);
     v.setUint8(11, 1);
     p.ws.send(buf);
   }
@@ -97,6 +112,7 @@ setInterval(sendInput, 33);
 await deadline(4000);
 for (const [i, p] of [p1, p2].entries()) {
   ok(p.state.snaps > 50, `player ${i + 1}: ${p.state.snaps} snapshots in ~4s (want >50)`);
+  ok(p.state.layoutErr === null, `player ${i + 1}: snapshot layout intact (2b fields, LE pinned)${p.state.layoutErr ? ` — ${p.state.layoutErr}` : ''}`);
   ok(p.state.lastTick !== null && p.state.lastTick > p.state.firstTick, `player ${i + 1}: ticks advanced ${p.state.firstTick}→${p.state.lastTick}`);
   ok(p.state.joined >= 1, `player ${i + 1}: saw ${p.state.joined} join broadcast(s)`);
 }

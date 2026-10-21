@@ -5,6 +5,7 @@
  * - `/api/rooms`         create a room (POST) / room status (GET /api/rooms/:code).
  * - `/rt/probe`          WebSocket to a fresh ProbeRoom Durable Object (Phase 0 spike S2/S3).
  * - `/rt/room`           WebSocket to the GameRoom referee for a room code.
+ * - `/r/CODE`            share link: serves the app, which prefills the join code.
  * - everything else is served from the static assets.
  */
 import { PROBE_HINTS, type ProbeHint } from '../src/net/probe';
@@ -94,6 +95,12 @@ export default {
 
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/rt/')) {
       return new Response('Not found', { status: 404 });
+    }
+    // Share links (/r/CODE): serve the app, which prefills the join code.
+    if (url.pathname.startsWith('/r/')) {
+      const u = new URL(request.url);
+      u.pathname = '/';
+      return env.ASSETS.fetch(new Request(u, request));
     }
     return env.ASSETS.fetch(request);
   },

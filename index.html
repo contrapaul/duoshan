@@ -44,8 +44,18 @@
           <option value="low">Low</option>
         </select></label>
         <label>Mouse sensitivity <input id="opt-sensitivity" type="range" min="0.8" max="5" step="0.1" value="2.2" /></label>
+        <label>Name <input id="opt-name" type="text" maxlength="20" placeholder="random if empty" /></label>
       </div>
-      <button id="play">PLAY</button>
+      <button id="play">PLAY (offline vs bots)</button>
+      <div class="online">
+        <h3>Online · real players (Match size above applies)</h3>
+        <div class="online-row">
+          <button id="online-create">CREATE ROOM</button>
+          <input id="join-code" type="text" maxlength="5" placeholder="ROOM CODE" spellcheck="false" autocomplete="off" />
+          <button id="online-join">JOIN</button>
+        </div>
+        <p id="online-status" class="status"></p>
+      </div>
       <div class="controls">
         <b>WASD</b> move · <b>Shift</b> sprint · <b>Space</b> jump · <b>A/D + Space</b> sidestep dash · <b>C</b> crouch (sprint + C = slide)<br />
         <b>Left click</b> or <b>E</b>: pick up / catch · <b>Left click</b> or <b>Q</b> with a ball: throw (hold up to 1.2 s to aim)<br />
@@ -60,7 +70,8 @@
 
   <div id="pause" class="overlay hidden">
     <div class="panel">
-      <h2>Paused</h2>
+      <h2 id="pause-title">Paused</h2>
+      <p id="room-share" class="hidden"></p>
       <button id="resume">RESUME</button>
       <button id="quit" class="secondary">QUIT TO MENU</button>
     </div>

@@ -37,17 +37,21 @@ export function cleanName(raw: string | undefined, rng: Rng): string {
 // The server applies the newest packet it has for each human each tick;
 // sequence numbers exist so reconciliation (Phase 2c) can replay inputs.
 
+// Little-endian is pinned explicitly at every multi-byte DataView operation:
+// some runtimes (e.g. certain Node 24 builds) default DataView to big-endian,
+// and the worker and the browser must agree regardless of their defaults.
+
 const TAU = Math.PI * 2;
 
 export function encodeInput(seq: number, input: PlayerInput): ArrayBuffer {
   const buf = new ArrayBuffer(1 + 4 + 2 + 2 + 2 + 1);
   const v = new DataView(buf);
   v.setUint8(0, 2 /* MSG_INPUT */);
-  v.setUint32(1, seq);
+  v.setUint32(1, seq, true);
   v.setInt8(5, Math.round(Math.max(-1, Math.min(1, input.moveX)) * 127));
   v.setInt8(6, Math.round(Math.max(-1, Math.min(1, input.moveZ)) * 127));
-  v.setUint16(7, Math.round((((input.yaw % TAU) + TAU) % TAU) / TAU * 65535));
-  v.setInt16(9, Math.round(Math.max(-1.6, Math.min(1.6, input.pitch)) * 1000));
+  v.setUint16(7, Math.round((((input.yaw % TAU) + TAU) % TAU) / TAU * 65535), true);
+  v.setInt16(9, Math.round(Math.max(-1.6, Math.min(1.6, input.pitch)) * 1000), true);
   v.setUint8(11,
     (input.sprint ? 1 : 0) | (input.crouch ? 2 : 0) | (input.jump ? 4 : 0) |
     (input.primary ? 8 : 0) | (input.secondary ? 16 : 0) | (input.use ? 32 : 0));
@@ -60,14 +64,14 @@ export function decodeInput(buf: ArrayBuffer | Uint8Array): { seq: number; input
   const v = buf instanceof ArrayBuffer
     ? new DataView(buf)
     : new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const seq = v.getUint32(1);
+  const seq = v.getUint32(1, true);
   return {
     seq,
     input: {
       moveX: v.getInt8(5) / 127,
       moveZ: v.getInt8(6) / 127,
-      yaw: (v.getUint16(7) / 65535) * TAU,
-      pitch: v.getInt16(9) / 1000,
+      yaw: (v.getUint16(7, true) / 65535) * TAU,
+      pitch: v.getInt16(9, true) / 1000,
       sprint: !!(v.getUint8(11) & 1),
       crouch: !!(v.getUint8(11) & 2),
       jump: !!(v.getUint8(11) & 4),
