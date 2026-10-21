@@ -1141,7 +1141,12 @@ export const speedBall: BallDef = {
 
 #### Phase 2: Networked Core (Weeks 8–12)
 **Goal:** low-latency online play that feels fair.
-**Status (2026-10-21):** ⬜ Not started — next phase. Owner's first milestone: **testable multiplayer in real play** — deployed to `duoshan.contrapaul.com` with room codes, so two or more real players can play over the network. First slice: `GameRoom` DO referee (port of the `ProbeRoom` loop) + `Directory`/room codes + join flow, client prediction and reconciliation, forward-predicted balls, defender-favoured catches, bot fill, reconnect. Local Host mode is not built (§13.10, row 1).
+**Status (2026-10-21):** 🔨 In progress. Owner's first milestone: **testable multiplayer in real play** — deployed to `duoshan.contrapaul.com` with room codes, so two or more real players can play over the network.
+
+- **Slice 2a — done:** `GameRoom` Durable Object referee (60 Hz tick, 30 Hz binary snapshots, JSON events, bot fill on leave) + `Directory` DO (room codes, D1-free SQLite status table, heartbeats) + HTTP/WS routes (`POST/GET /api/rooms`, `/rt/room`, share URLs `/r/CODE`). Verified end-to-end with `tools/room-check.mjs` (2 players, balanced teams, snapshot/event flow, roster, leave → bot fill, directory 0 players).
+- **Slice 2b — done:** client join flow — name field, CREATE ROOM / JOIN-by-code panel, share link in the pause overlay, snapshot-authoritative rendering (no local sim online; the snapshot codec was extended with HUD/render fields and pinned little-endian), `/r/CODE` share links serve the app and auto-join. Verified with `npm run check` (52 tests) plus a headless-browser smoke of the full create → play → share → quit → join flow.
+- **Next — slice 2c (netcode feel):** client-side interpolation is already in place; add input smoothing and the defender-favoured catch window (≈200 ms server rewind) so play feels fair at the observed latencies. Then **2d:** reconnect (60 s slot hold) and join-in-progress.
+- Local Host mode is not built (§13.10, row 1).
 - The `GameRoom` Durable Object (the referee) and the `Directory` DO, with a fixed tick and snapshots with delta compression. Join tickets follow Flashstone's pattern.
 - Client prediction and reconciliation, entity interpolation, forward-predicted balls, and catch/block lag compensation.
 - Room codes, share URLs, Quick Play, bot fill to 6, join-in-progress, and reconnect.

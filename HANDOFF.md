@@ -39,7 +39,7 @@ DuoShan is a browser-based multiplayer dodgeball game (first person, voxel chara
 |---|---|
 | 0 Foundations | ✅ Done (2026-10-21). S1 fps passed on M1 Air (owner: "perfectly acceptable"), S2 latency passed (68 ms median from Shenzhen). |
 | 1 Offline feel prototype | ✅ Done (2026-10-21). Well beyond the plan (two playtest rounds incorporated); students enjoy it and ask to play again — exit criterion met. |
-| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | ⬜ **Next — unblocked.** Owner's first milestone: testable multiplayer in real play — deployed to `duoshan.contrapaul.com` with room codes, 2+ real players over the network. Build on Cloudflare DOs as designed (no Local Host mode). |
+| 2 Networked core (GameRoom DO, prediction, room codes, Quick Play, reconnect, join-in-progress) | 🔨 **In progress.** Slices 2a (GameRoom DO referee + Directory room codes, verified e2e) and 2b (client join flow: create/join by code, share links `/r/CODE`, snapshot-authoritative online rendering) are done and checked. Next: 2c netcode feel (input smoothing, defender-favoured catch window ≈200 ms rewind), then 2d reconnect (60 s slot hold) + join-in-progress. Quick Play deferred. |
 | 3 Alpha (round overtime/shrinking court, sudden death, match clock, tutorial, art pass) | ⬜ Not started |
 | 4 Accounts, chat, moderation, admin (D1 not yet created) | ⬜ Not started |
 | 5 Arenas: Hypergym, Neighborhood, City Block, Ultimate | ⬜ Not started |
@@ -134,24 +134,31 @@ Balls keep their colour on the ground and glow in their own colour while live. B
 | `src/sim/tuning.ts` | All tunable numbers: PLAYER, HANDLING, BALLS, RULES, SCORE, SLOWMO |
 | `src/sim/arena.ts` | Arena defs, `centerlineX`, `pushClear`, `spectatorSeats`, `ARENAS` |
 | `src/bots/bot.ts` | Bot brains; `aimAt` (ballistic aim) is exported |
-| `src/net/snapshot.ts`, `probe.ts` | Binary snapshot codec and the latency-probe protocol |
+| `src/net/snapshot.ts`, `probe.ts` | Binary snapshot codec (pinned little-endian; the 2b HUD fields: round, phase/slow timers, time scale, target, per-player velocity/stamina/action timers/stats) and the latency-probe protocol |
+| `src/net/protocol.ts` | Room-code alphabet, code generation, guest names, and the 12-byte binary input codec (`encodeInput`/`decodeInput`) |
 | `src/render/` | `scene.ts` (court, lights), `character.ts` (rig, poses, first-person arms), `ragdoll.ts` (Rapier), `view.ts` (GameView: balls, glow, trails, cameras, kill cam, bleachers) |
-| `src/app/` | `main.ts` (menu, settings, fixed-step loop), `input.ts`, `hud.ts` (feed, scoreboard, flashes), `audio.ts`, `latency.ts` (latency page), `style.css` |
-| `worker/index.ts` | Routes `/api/ping` and `/rt/probe` (a new `ProbeRoom` DO per test); serves assets for everything else |
-| `worker/ProbeRoom.ts` | Runs the real sim with 16 bots at 60 Hz, sends snapshots at 30 Hz, stops after 90 s. This is the only DO so far. |
+| `src/app/` | `main.ts` (menu, settings, fixed-step loop, online join flow), `online.ts` (WS session: hello/welcome, snapshots → client state, 30 Hz input send), `input.ts`, `hud.ts` (feed, scoreboard, flashes), `audio.ts`, `latency.ts` (latency page), `style.css` |
+| `worker/index.ts` | Routes `/api/ping`, `/api/rooms` (create/status), `/rt/room` (GameRoom WS), `/rt/probe` (a new `ProbeRoom` DO per test), and `/r/CODE` (share links serve the app, which auto-joins); serves assets for everything else |
+| `worker/GameRoom.ts` | The referee DO: 60 Hz tick, 30 Hz binary snapshots, JSON events (welcome/joined/left/full/events), bot fill on leave, heartbeats to the Directory, location-hinted |
+| `worker/RoomDirectory.ts` | DO + Durable Object SQLite: room codes, status rows, heartbeats |
+| `worker/ProbeRoom.ts` | Runs the real sim with 16 bots at 60 Hz, sends snapshots at 30 Hz, stops after 90 s. Latency spike only. |
 | `tools/bench.ts` | Referee benchmark (`npm run bench`). 8v8 costs about 0.075 ms per tick. |
-| `wrangler.jsonc` | Worker config: assets `./dist`, `run_worker_first` for `/api/*` and `/rt/*`, DO `PROBE`, custom domain |
+| `tools/room-check.mjs` | End-to-end room test against a running `wrangler dev`: `node tools/room-check.mjs http://127.0.0.1:8788` (create, 2 players, snapshots/events, layout, leave, directory) |
+| `wrangler.jsonc` | Worker config: assets `./dist`, `run_worker_first` for `/api/*` and `/rt/*`, DOs `PROBE`, `GAMEROOM`, `DIRECTORY`, custom domain |
 
 ## 8. Commands and verification
 
 ```
 npm run dev        # Vite client
 npm run dev:api    # wrangler dev --port 8788 --local (Vite proxies /api and /rt to it)
-npm run check      # typecheck + lint + vitest (42 tests passing)
+npm run check      # typecheck + lint + vitest (52 tests passing)
 npm run build      # multi-page build: index.html, latency.html
 npm run bench      # referee benchmark
+node tools/room-check.mjs http://127.0.0.1:8788   # e2e room test (needs npm run dev:api running)
 npm run deploy     # build + wrangler deploy (owner runs this)
 ```
+
+**Headless-browser smoke (2b):** Microsoft Edge headless with `--use-angle=swiftshader` (WebGL is otherwise disabled in the sandboxed profile) driven over CDP; synthetic clicks cannot acquire pointer lock, so tests must not require it.
 
 **Visual checks:**
 - Use Playwright with the preinstalled Chromium (`/opt/pw-browsers`) and swiftshader.
@@ -164,6 +171,9 @@ CI (`.github/workflows/check.yml`) runs the same checks.
 ## 9. Recent history
 
 ```
+b0a9cb8 Client join flow and room codes: create/join by code, share links, snapshot-authoritative online play (slice 2b)
+b218290 Multiplayer room referee: GameRoom DO + Directory room codes + e2e check (slice 2a)
+149da4c Docs: record Phase 0 and 1 completion, set Phase 2 first milestone
 3d260db Remove the possession clock: players can hold a ball indefinitely
 76bffe1 Straight line on Full Court, E-hold shield, Q throw, sprint lean, trip head-cam
 cb6df95 Add bounce ball, Full Court default arena, and bleacher spectating
