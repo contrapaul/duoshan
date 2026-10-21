@@ -30,7 +30,8 @@ export interface GameOptions {
   fullSlow?: boolean;
 }
 
-const BOT_NAMES = [
+/** Bot and guest display names (§9.1); also the pool for `guestName`. */
+export const BOT_NAMES = [
   'Swift Otter', 'Rubber Duck', 'Captain Bounce', 'Noodle Arms', 'Dodge Lord', 'Sneaky Panda', 'Big Kev',
   'Slippy Socks', 'Lefty', 'The Wall', 'Turbo Nan', 'Gym Ghost', 'Mr. Whistle', 'Sir Catchalot', 'Tiny Tim', 'Boomer',
 ];
