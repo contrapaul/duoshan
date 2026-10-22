@@ -1112,11 +1112,11 @@ export const speedBall: BallDef = {
 | Scaffold (Tome layout, `wrangler.jsonc`, lint boundary for `src/sim`, CI, `CLAUDE.md`) | ✅ Done | `npm run check` (typecheck, lint, tests) passes, and runs in GitHub Actions |
 | Playable offline demo (Classic Gym greybox vs bots) | ✅ Done | Movement, slide, trips, pickup/throw/aim/catch/block, 3 ball types, centerline, rounds, revive-on-catch, Rapier ragdolls, 1st/3rd person, HUD, kill feed, placeholder sound, banner slots |
 | **S1** performance on an M1 MacBook Air | ✅ **Done (2026-10-21)** | Owner ran the 8v8 stress test on an M1 MacBook Air: fps "perfectly acceptable" (meets the 60 fps exit criterion). |
-
-**Phase 0 is now complete** (2026-10-21): all four spikes have a verdict, and every exit criterion is met. |
 | **S2** latency from Shenzhen | ✅ **Done (2026-10-19)** | Edge and room in KIX (Osaka). Median RTT **68 ms**, p95 101 ms, jitter 9 ms, 0% loss; 30 updates/s at 8.7 KB/s down. **Verdict: proceed as designed (§13.10, row 1); no Local Host mode.** A repeat from the other Shenzhen location at a busy hour is a non-blocking follow-up. |
 | **S3** referee loop in a Durable Object | ✅ Done | `npm run bench`: 8v8 averages 0.075 ms per tick. On Cloudflare (KIX), the DO held 60 ticks/s with a worst timer gap of 16 ms. Rapier-in-DO wasn't needed. |
 | **S4** netcode feel at 150 ms | ⏭ Moved to Phase 2 | It needs the prediction layer. The binary snapshot codec (~300 bytes at 8v8) is already built and tested. |
+
+**Phase 0 is now complete** (2026-10-21): all four spikes have a verdict, and every exit criterion is met.
 
 **Tuning notes from building it:**
 - Bots need the ballistic aim solver (`aimAt`). Straight-line aim misses badly at 10 m+.

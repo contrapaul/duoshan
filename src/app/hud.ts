@@ -94,7 +94,7 @@ export class Hud {
   update(state: GameState, dt: number, perf: string, thirdPerson: boolean): void {
     const me = state.players[this.local]!;
     const myTeam = me.team;
-    $('score').innerHTML = `<span class="mate">${myTeam === 0 ? 'BLUE' : 'RED'} ${state.score[myTeam]}</span> — <span class="foe">${state.score[1 - myTeam]} ${myTeam === 0 ? 'RED' : 'BLUE'}</span><small>Round ${state.round} · first to 4</small>`;
+    $('score').innerHTML = `<span class="mate">YOUR TEAM ${state.score[myTeam]}</span> — <span class="foe">${state.score[1 - myTeam]} OPPONENTS</span><small>Round ${state.round} · first to 4</small>`;
     const dots = (team: 0 | 1) => state.players.filter((p) => p.team === team)
       .map((p) => `<span class="dot ${p.life === 'out' && p.reviveT <= 0 ? 'out' : ''}"></span>`).join('');
     $('alive').innerHTML = `<div class="mate">${dots(myTeam)}</div><div class="foe">${dots((1 - myTeam) as 0 | 1)}</div>`;
@@ -184,7 +184,7 @@ export class Hud {
           <td>${status(p)}</td><td>${p.kos}</td><td>${p.catches}</td><td>${p.blocks}</td><td><b>${p.score}</b></td><td>${p.coins}</td>
         </tr>`).join('');
       const cls = t === me.team ? 'mate' : 'foe';
-      return `<div class="team"><h3 class="${cls}">${t === 0 ? 'BLUE' : 'RED'} · ${state.score[t]}</h3>
+      return `<div class="team"><h3 class="${cls}">${t === me.team ? 'YOUR TEAM' : 'OPPONENTS'} · ${state.score[t]}</h3>
         <table><tr><th>Player</th><th>Status</th><th>KOs</th><th>Catches</th><th>Blocks</th><th>Score</th><th>Coins</th></tr>${rows}</table></div>`;
     };
     el.innerHTML = `<div class="sb-head">Round ${state.round} · first to 4</div><div class="sb-teams">${team(me.team)}${team((1 - me.team) as 0 | 1)}</div>`;
