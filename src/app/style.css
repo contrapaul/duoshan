@@ -22,6 +22,15 @@ button { font: inherit; font-weight: 700; font-size: 18px; letter-spacing: 2px; 
 button.secondary { background: #3a4456; color: var(--ink); }
 .controls { margin-top: 18px; font-size: 13px; line-height: 1.7; opacity: 0.8; }
 .links a { color: var(--accent); }
+.online { margin: 14px 0 6px; padding: 14px; border: 1px solid #2c3444; border-radius: 10px; text-align: left; }
+.online h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.75; }
+.online-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.online-row button { font-size: 15px; padding: 10px 18px; margin: 0; white-space: nowrap; }
+#join-code { flex: 1; min-width: 130px; font: inherit; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; text-align: center; padding: 10px; border-radius: 8px; border: 1px solid #2c3444; background: #0d1119; color: var(--ink); }
+#online-status { min-height: 1.2em; margin: 8px 0 0; font-size: 13px; opacity: 0.85; text-align: center; }
+#online-status a { color: var(--accent); word-break: break-all; }
+#room-share { margin: 6px 0 12px; font-size: 14px; text-align: center; }
+#room-share a { color: var(--accent); word-break: break-all; }
 @media (max-width: 560px) { .opts { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
 
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; text-shadow: 0 1px 3px #000; }

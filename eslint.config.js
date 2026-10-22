@@ -19,6 +19,11 @@ export default tseslint.config(
     },
   },
   {
+    // Node scripts in tools/ may use the Node global scope.
+    files: ['tools/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', fetch: 'readonly', setInterval: 'readonly', setTimeout: 'readonly', WebSocket: 'readonly', Buffer: 'readonly' } },
+  },
+  {
     files: ['src/sim/**/*.ts', 'src/bots/**/*.ts', 'src/net/**/*.ts'],
     rules: {
       'no-restricted-imports': [
