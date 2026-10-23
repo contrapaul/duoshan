@@ -2,7 +2,7 @@
  * Binary snapshot codec (PROJECT_PLAN.md §13.5): quantised to 1 cm positions,
  * 16-bit angles and small fixed-point fields for the HUD (stamina, charge,
  * timers, stats). Full snapshots for now; delta compression comes in Phase 2.
- * At 8v8 with 8 balls a snapshot is ~685 bytes, ~20 KB/s at 30 Hz.
+ * At 8v8 with 8 balls a snapshot is ~733 bytes, ~22 KB/s at 30 Hz.
  *
  * Little-endian is pinned explicitly at every multi-byte operation: some
  * runtimes (e.g. certain Node 24 builds) default DataView to big-endian, and
@@ -43,7 +43,7 @@ export interface PlayerSnap {
   coins: number; kos: number; catches: number; blocks: number; score: number;
   onGround: boolean;
 }
-export interface BallSnap { id: number; x: number; y: number; z: number; state: (typeof BALL_STATES)[number]; type: BallType }
+export interface BallSnap { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; state: (typeof BALL_STATES)[number]; type: BallType }
 export interface Snapshot {
   tick: number; phase: (typeof PHASES)[number]; score: [number, number];
   players: PlayerSnap[]; balls: BallSnap[];
@@ -53,7 +53,7 @@ export interface Snapshot {
 
 export function encodeSnapshot(s: GameState): ArrayBuffer {
   const target = s.target;
-  const size = 1 + 4 + 1 + 2 + 2 + 7 + (target ? 7 : 0) + s.players.length * 33 + s.balls.length * 8;
+  const size = 1 + 4 + 1 + 2 + 2 + 7 + (target ? 7 : 0) + s.players.length * 33 + s.balls.length * 14;
   const buf = new ArrayBuffer(size);
   const v = new DataView(buf);
   let o = 0;
@@ -101,6 +101,10 @@ export function encodeSnapshot(s: GameState): ArrayBuffer {
     v.setInt16(o, cm(b.pos.y), true); o += 2;
     v.setInt16(o, cm(b.pos.z), true); o += 2;
     v.setUint8(o++, BALL_STATES.indexOf(b.state) | (BALL_TYPES.indexOf(b.type) << 4));
+    // Velocity for client-side forward prediction (cm/s, 16-bit fixed point).
+    v.setInt16(o, cm(b.vel.x), true); o += 2;
+    v.setInt16(o, cm(b.vel.y), true); o += 2;
+    v.setInt16(o, cm(b.vel.z), true); o += 2;
   }
   return buf;
 }
@@ -155,7 +159,10 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot {
     const y = v.getInt16(o, true) / 100; o += 2;
     const z = v.getInt16(o, true) / 100; o += 2;
     const f = v.getUint8(o++);
-    balls.push({ id, x, y, z, state: BALL_STATES[f & 15]!, type: BALL_TYPES[f >> 4]! });
+    const vx = v.getInt16(o, true) / 100; o += 2;
+    const vy = v.getInt16(o, true) / 100; o += 2;
+    const vz = v.getInt16(o, true) / 100; o += 2;
+    balls.push({ id, x, y, z, vx, vy, vz, state: BALL_STATES[f & 15]!, type: BALL_TYPES[f >> 4]! });
   }
   return { tick, phase, score, players, balls, round, phaseT, slowT, timeScale, target };
 }
@@ -210,6 +217,7 @@ export function applySnapshot(s: GameState, d: Snapshot): void {
     const b = s.balls[bs.id];
     if (!b) continue;
     b.pos = { x: bs.x, y: bs.y, z: bs.z };
+    b.vel = { x: bs.vx, y: bs.vy, z: bs.vz };
     b.state = bs.state;
     b.type = bs.type;
   }

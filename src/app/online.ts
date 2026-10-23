@@ -1,14 +1,12 @@
 /**
  * Online match session (Phase 2b): one WebSocket to the GameRoom referee.
- * The browser never steps the sim — it sends 30 Hz input packets and renders
- * the referee's 30 Hz snapshots into its local state container. Prediction,
- * reconciliation and reconnect arrive in Phase 2c/2d.
+ * The browser never steps the sim — it sends one input sample per render frame
+ * (~60 Hz, Phase 2c) and renders the referee's 30 Hz snapshots into its local
+ * state container. Reconnect arrives in Phase 2d.
  */
 import { encodeInput, type RoomClientMsg, type RoomServerMsg } from '../net/protocol';
 import { decodeSnapshot, type Snapshot } from '../net/snapshot';
 import type { PlayerInput, SimEvent } from '../sim/types';
-
-const INPUT_MS = 33; // 30 Hz, same rate as the referee's snapshots
 
 export interface WelcomeMsg {
   code: string;
@@ -32,7 +30,6 @@ export interface OnlineCallbacks {
 export class OnlineSession {
   private ws: WebSocket | undefined;
   private seq = 0;
-  private inputTimer: ReturnType<typeof setInterval> | undefined;
   private sample: (() => PlayerInput) | undefined;
 
   constructor(readonly code: string, readonly name: string, private cbs: OnlineCallbacks) {}
@@ -48,41 +45,36 @@ export class OnlineSession {
     };
     ws.onmessage = (ev) => this.onMessage(ev.data);
     ws.onclose = (ev) => {
-      this.stopInput();
       if (this.closed) return;
       this.closed = true;
       this.cbs.onClosed(ev.reason ? `room closed: ${ev.reason}` : `connection lost (${ev.code})`);
     };
   }
 
-  /** Start pumping the player's inputs at 30 Hz. Called once the local view is ready. */
+  /** Remember the input sampler. Called once the local view is ready. */
   begin(sample: () => PlayerInput): void {
     this.sample = sample;
-    this.inputTimer = setInterval(() => {
-      const ws = this.ws;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !this.sample) return;
-      try {
-        ws.send(encodeInput(this.seq++, this.sample()));
-      } catch {
-        /* close handler reports the disconnect */
-      }
-    }, INPUT_MS);
+  }
+
+  /** Send one input sample. Called from the render loop, once per frame (~60 Hz). */
+  sendInput(): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !this.sample) return;
+    try {
+      ws.send(encodeInput(this.seq++, this.sample()));
+    } catch {
+      /* close handler reports the disconnect */
+    }
   }
 
   closed = false;
 
   close(): void {
     this.closed = true;
-    this.stopInput();
     try {
       this.ws?.close(1000, 'leaving');
     } catch { /* already gone */ }
     this.ws = undefined;
-  }
-
-  private stopInput(): void {
-    if (this.inputTimer) clearInterval(this.inputTimer);
-    this.inputTimer = undefined;
   }
 
   private onMessage(data: unknown): void {

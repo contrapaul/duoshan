@@ -105,7 +105,7 @@ export function resetRound(state: GameState): void {
   state.balls = state.ballTypes.map((type, i) => ({
     id: i, type,
     pos: ballSpawn(state.arena, BALLS[type].radius, n === 1 ? 0 : -hw + (2 * hw * i) / (n - 1)),
-    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [], bounces: 0,
+    vel: v3(), state: 'rest', holder: -1, thrower: -1, throwerTeam: -1, hits: [], deflectedBy: -1, flags: [], near: [], dodged: [], bounces: 0, hist: [],
   }));
   state.firstKoThisRound = false;
   state.outCounter = 0;
@@ -582,6 +582,7 @@ function throwBall(state: GameState, p: Player, ball: Ball, charge: number): voi
   ball.thrower = p.id;
   ball.throwerTeam = p.team;
   ball.hits = [];
+  ball.hist = []; // fresh trajectory: the rewind window starts at the throw
   ball.near = [];
   ball.dodged = [];
   ball.bounces = 0;
@@ -700,6 +701,10 @@ function updateBalls(state: GameState): void {
       continue;
     }
     if (ball.state === 'rest') continue;
+    // Record the pre-integration position once per tick for the defender-favoured
+    // catch/shield rewind (HANDLING.catchRewindTicks of history = 200 ms).
+    ball.hist.push(copy(ball.pos));
+    if (ball.hist.length > HANDLING.catchRewindTicks) ball.hist.shift();
     const def = BALLS[ball.type];
     const speed = len(ball.vel);
     const n = clamp(Math.ceil((speed * state.dt) / def.radius), 1, 12);
@@ -868,6 +873,15 @@ function trackNearMiss(state: GameState, ball: Ball, p: Player, gap: number): vo
   }
 }
 
+/**
+ * The defender-favoured rewind window: the current position plus the last
+ * catchRewindTicks pre-integration positions (oldest first).
+ */
+function rewindWindow(ball: Ball): Generator<Vec3> {
+  for (let i = ball.hist.length - 1; i >= 0; i--) yield ball.hist[i]!;
+  yield ball.pos;
+}
+
 /** Returns true if the ball was caught (and is now held). */
 function checkCatch(state: GameState, ball: Ball): boolean {
   const def = BALLS[ball.type];
@@ -877,11 +891,18 @@ function checkCatch(state: GameState, ball: Ball): boolean {
     if (a.kind !== 'catch' || a.t > HANDLING.catchWindow) continue;
     const f = viewDir(p.yaw, p.pitch);
     const e = eyePos(p);
-    const toBall = sub(ball.pos, e);
-    const center = v3(e.x + f.x * 0.5, e.y - 0.3 + f.y * 0.5, e.z + f.z * 0.5);
-    const inReach = dist(ball.pos, center) <= HANDLING.catchRadius * def.catchRadiusScale;
-    const inView = angleBetween(f, toBall) <= (def.catchConeDeg * Math.PI) / 180;
-    if (!inReach || !inView) continue;
+    // A catch succeeds if the ball was inside the volume on any tick of the
+    // rewind window: a catch you saw on your screen counts.
+    let hit: Vec3 | undefined;
+    for (const pos of rewindWindow(ball)) {
+      const toBall = sub(pos, e);
+      const center = v3(e.x + f.x * 0.5, e.y - 0.3 + f.y * 0.5, e.z + f.z * 0.5);
+      const inReach = dist(pos, center) <= HANDLING.catchRadius * def.catchRadiusScale;
+      const inView = angleBetween(f, toBall) <= (def.catchConeDeg * Math.PI) / 180;
+      if (inReach && inView) { hit = pos; break; }
+    }
+    if (!hit) continue;
+    const toBall = sub(hit, e);
     if (!def.catchable) {
       ball.hits.push(p.id);
       knockOut(state, p, ball.thrower, ball.id, 'heavy_catch', copy(ball.pos), scale(ball.vel, def.koImpulse * 0.15));
@@ -923,9 +944,15 @@ function collideBallShields(state: GameState, ball: Ball): void {
     const shield = state.balls[p.held]!;
     const sr = BALLS[shield.type].radius;
     const c = shieldPos(p);
-    const d = sub(ball.pos, c);
+    // Defender-favoured rewind: a block succeeds if the ball was inside the
+    // shield volume on any tick of the rewind window.
+    let hit: Vec3 | undefined;
+    for (const pos of rewindWindow(ball)) {
+      if (len(sub(pos, c)) < def.radius + sr) { hit = pos; break; }
+    }
+    if (!hit) continue;
+    const d = sub(hit, c);
     const dl = len(d);
-    if (dl >= def.radius + sr) continue;
     const n = dl > 1e-9 ? scale(d, 1 / dl) : scale(viewDir(p.yaw, p.pitch), 1);
     ball.pos = add(c, scale(n, def.radius + sr + 0.01));
     const rel = sub(ball.vel, p.vel);
@@ -936,6 +963,7 @@ function collideBallShields(state: GameState, ball: Ball): void {
     const give = def.breaksShield ? 0.55 : 1;
     const e = (def.restitution + BALLS[shield.type].restitution) / 2;
     ball.vel = sub(ball.vel, scale(n, (1 + e) * vn * give));
+    ball.hist.length = 0; // trajectory changed: invalidate the stale rewind window
     if (ball.state === 'live') {
       ball.deflectedBy = p.id;
       if (!ball.hits.includes(p.id)) ball.hits.push(p.id);
