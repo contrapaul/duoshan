@@ -877,7 +877,7 @@ function trackNearMiss(state: GameState, ball: Ball, p: Player, gap: number): vo
  * The defender-favoured rewind window: the current position plus the last
  * catchRewindTicks pre-integration positions (oldest first).
  */
-function rewindWindow(ball: Ball): Generator<Vec3> {
+function* rewindWindow(ball: Ball): Generator<Vec3> {
   for (let i = ball.hist.length - 1; i >= 0; i--) yield ball.hist[i]!;
   yield ball.pos;
 }
