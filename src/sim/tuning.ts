@@ -51,6 +51,12 @@ export const HANDLING = {
   catchCooldown: 0.5,
   catchRadius: 0.7,
   catchConeDeg: 35,
+  /**
+   * Defender-favoured rewind: a catch or shield block succeeds if the ball was
+   * inside the volume on any of the last N ticks (200 ms at 60 Hz). Makes a
+   * catch you saw on your screen count; 0 restores the current-tick behaviour.
+   */
+  catchRewindTicks: 12,
   /** Block stance: the held ball becomes a solid shield this far in front of the chest. */
   shieldForward: 0.45,
   inheritVelocity: 0.5,

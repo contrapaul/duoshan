@@ -102,6 +102,8 @@ export interface Ball {
   dodged: number[];
   /** Environment bounces survived while live (bounce ball). */
   bounces: number;
+  /** Pre-integration positions for the defender-favoured catch/block rewind (newest last). */
+  hist: Vec3[];
 }
 
 export type SimEvent =

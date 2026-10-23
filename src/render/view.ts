@@ -152,11 +152,16 @@ export class GameView {
     this.ragdollWorld.step(dt);
   }
 
-  render(state: GameState, prev: Snap, alpha: number, dt: number, look: { yaw: number; pitch: number }): void {
+  /**
+   * Online-mode predictions: render these positions instead of interpolating
+   * (the local player extrapolated by its own input; live balls by velocity).
+   * Undefined entries fall back to normal interpolation.
+   */
+  render(state: GameState, prev: Snap, alpha: number, dt: number, look: { yaw: number; pitch: number }, pred?: { local?: { x: number; y: number; z: number }; balls?: ({ x: number; y: number; z: number } | undefined)[] }): void {
     const local = state.players[this.local]!;
-    for (const p of state.players) this.drawPlayer(state, p, prev.players[p.id]!, alpha, dt, look);
-    state.balls.forEach((b, i) => this.drawBall(b, prev.balls[i]!, alpha, state));
-    this.placeCamera(state, local, prev.players[local.id]!, alpha, look, dt);
+    for (const p of state.players) this.drawPlayer(state, p, prev.players[p.id]!, alpha, dt, look, pred?.local);
+    state.balls.forEach((b, i) => this.drawBall(b, prev.balls[i]!, alpha, state, pred?.balls?.[b.id]));
+    this.placeCamera(state, local, prev.players[local.id]!, alpha, look, dt, pred?.local);
     this.drawFpArms(state, local, dt);
     this.target.visible = !!state.target;
     if (state.target) {
@@ -166,7 +171,7 @@ export class GameView {
     this.renderer.render(this.scene, this.camera);
   }
 
-  private drawPlayer(state: GameState, p: Player, prev: { x: number; y: number; z: number }, alpha: number, dt: number, look: { yaw: number; pitch: number }): void {
+  private drawPlayer(state: GameState, p: Player, prev: { x: number; y: number; z: number }, alpha: number, dt: number, look: { yaw: number; pitch: number }, selfPred?: { x: number; y: number; z: number }): void {
     const c = this.chars[p.id]!;
     const ragdolled = this.ragdolls.has(p.id);
     const firstPersonSelf = p.id === this.local && !this.thirdPerson && p.life !== 'out';
@@ -191,7 +196,8 @@ export class GameView {
       });
       return;
     }
-    c.root.position.set(lerp(prev.x, p.pos.x, alpha), lerp(prev.y, p.pos.y, alpha), lerp(prev.z, p.pos.z, alpha));
+    const sp = p.id === this.local ? selfPred : undefined;
+    c.root.position.set(sp ? sp.x : lerp(prev.x, p.pos.x, alpha), sp ? sp.y : lerp(prev.y, p.pos.y, alpha), sp ? sp.z : lerp(prev.z, p.pos.z, alpha));
     const yaw = p.id === this.local ? look.yaw : p.yaw;
     const pitch = p.id === this.local ? look.pitch : p.pitch;
     c.root.rotation.y = yaw;
@@ -220,7 +226,7 @@ export class GameView {
     return seats[idx % seats.length];
   }
 
-  private drawBall(b: Ball, prev: { x: number; y: number; z: number }, alpha: number, state: GameState): void {
+  private drawBall(b: Ball, prev: { x: number; y: number; z: number }, alpha: number, state: GameState, pred?: { x: number; y: number; z: number }): void {
     const m = this.ballMeshes[b.id]!;
     const trail = this.trails[b.id]!;
     const holder = b.state === 'held' ? state.players[b.holder] : undefined;
@@ -232,8 +238,9 @@ export class GameView {
       c.root.updateMatrixWorld(true);
       m.position.copy(c.meshes.handR.localToWorld(new THREE.Vector3(0, -0.04, -(BALLS[b.type].radius + 0.02))));
     } else {
-      // Loose balls, and the shield in block stance, sit where the referee says.
-      m.position.set(lerp(prev.x, b.pos.x, alpha), lerp(prev.y, b.pos.y, alpha), lerp(prev.z, b.pos.z, alpha));
+      // Loose balls sit where the referee says — or where forward prediction
+      // puts them in online mode (pos + vel × Δt, computed by the caller).
+      m.position.set(pred ? pred.x : lerp(prev.x, b.pos.x, alpha), pred ? pred.y : lerp(prev.y, b.pos.y, alpha), pred ? pred.z : lerp(prev.z, b.pos.z, alpha));
     }
     const live = b.state === 'live';
     this.glows[b.id]!.visible = live;
@@ -276,7 +283,7 @@ export class GameView {
     });
   }
 
-  private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }, dt: number): void {
+  private placeCamera(state: GameState, me: Player, prev: { x: number; y: number; z: number }, alpha: number, look: { yaw: number; pitch: number }, dt: number, selfPred?: { x: number; y: number; z: number }): void {
     if (me.life === 'out' && this.ragdolls.has(me.id)) {
       // Kill camera: third person, locked on your own flying ragdoll, whatever view you were in.
       const target = this.chars[me.id]!.meshes.pelvis.getWorldPosition(new THREE.Vector3());
@@ -294,7 +301,7 @@ export class GameView {
     // Spectating from your bleacher seat (§9.4): you can look around, not move.
     const seat = me.life === 'out' ? this.seatFor(state, me) : undefined;
     const pos = seat ? { x: seat.x, y: seat.y, z: seat.z }
-      : { x: lerp(prev.x, me.pos.x, alpha), y: lerp(prev.y, me.pos.y, alpha), z: lerp(prev.z, me.pos.z, alpha) };
+      : (selfPred ?? { x: lerp(prev.x, me.pos.x, alpha), y: lerp(prev.y, me.pos.y, alpha), z: lerp(prev.z, me.pos.z, alpha) });
     let eye = seat ? v3(seat.x, seat.y + SEATED_EYE, seat.z) : eyePos({ ...me, pos });
     const f = viewDir(look.yaw, look.pitch);
     const r = rightDir(look.yaw);
